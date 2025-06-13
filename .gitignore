@@ -50,3 +50,4 @@ rsconnect/
 
 # Corpus token (too big)
 corpus_token.RData
+.DS_Store
