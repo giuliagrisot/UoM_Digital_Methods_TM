@@ -10,8 +10,8 @@
 # Before you begin you will need to load some packages. These allow you to execute specific operations.
 # If you have not done so already, you have to install them first: it might take a few minutes and you only have to do it once. If R asks you whether you want to install dependencies for the packages, say yes.
 
-if (!requireNamespace(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet"), quietly = TRUE)) {
-  install.packages(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet"))
+if (!requireNamespace(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet", "quanteda", "sjPlot", "wordcloud"), quietly = TRUE)) {
+  install.packages(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet", "quanteda", "sjPlot", "wordcloud"))
 }
 
 # After you have installed the packages, you can load them with the library function. You will need to do this every time you start a new R session.
