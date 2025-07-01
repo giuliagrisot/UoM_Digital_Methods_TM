@@ -1,4 +1,5 @@
 # The research question:
+
 # i would be interested to see the possibilities of extracting data about word relations. 
 # For example i am interested in literary spaces so it would be interesting to compare the surroundings of certain words, 
 # like which words are found around the word 'city' and which around the word 'mountain'. 
@@ -36,27 +37,23 @@ x <- udpipe(x = my_text, object = "italian")
 View(x)
 
 # then we can work with our German/Swiss texts
-my_text <- readLines("scripts/TS_corpus_txt/CH/federer_wunder_1919.txt")
+my_text <- readLines("samples/poe_reddeath_1842.txt", encoding = "UTF-8")
 my_text <- paste(my_text, collapse = "\n\n")
 
-p <- udpipe(x = my_text, object = "german")
+p <- udpipe(x = my_text, object = "english")
 
-# load the corpus
-# already prepared by Giulia :)
-load("scripts/samples/TS_corpus_small.RData")
 
-# let's explore it a bit
-View(corpus_small)
+corpus_small <- corpus_docs %>% 
+  slice_head(n=3) %>%  # let's take just a few documents
+  select(doc_id, text)
 
-# how many books are there?
-corpus_small %>% 
-  select(doc_id) %>%
-  distinct()
+# annotate the corpus
+corpus_small <- udpipe(corpus_small$text, object = "english")
 
 # now, we can start working on it!!
 
 # first, let's find the appearances of a certain word in the text
-lemma_found <- which(corpus_small$lemma== "Stadt")
+lemma_found <- which(corpus_small$lemma== "city")
 lemma_found
 
 ### Our Turn (1) - start

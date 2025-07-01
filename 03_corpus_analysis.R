@@ -159,6 +159,17 @@ corpus_token_sample %>%
   head(10)
 
 
+# Your Turn! -----------
+# Can you find the top 10 tokens used by another author in the corpus?
+
+
+
+
+
+
+
+
+
 
 ### 3. Collocations and Concordance -----------
 
@@ -176,8 +187,22 @@ ngrams <- corpus_docs %>%
   filter(n > 10)  # Filter to keep only ngrams that appear more than 10 times
 
 
+# Display the top 3 ngrams for 5 random authors
+
+corpus_docs %>%
+  # filter(author %in% sample(unique(author), 5)) %>%  # Randomly select 5 authors
+  filter(grepl("Woolf|Dickens|Brontë|Carroll", author)) %>%  # Filter for specific authors
+  group_by(author) %>%
+  unnest_ngrams(input = text, output = ngram, n = 4) %>% # Change n to 2 for bigrams
+  count(ngram, sort = TRUE) %>%
+  slice_head(n = 3)  # Display the top 3 bigrams
+  
+
+
 ### Your Turn (2) -----------
-# Find collocations (ngrams) in the corpus
+# Find collocations (ngrams) in the corpus: can you find any interesting phrases?
+
+
 
 
 

@@ -46,8 +46,9 @@ pride <- read.delim("samples/austen_pride_1813.txt", # this is the url to your f
 
 # your file has been imported! in this case, it looks just fine.
 
-# It could be that your texts has not the right structure. If so, you can manipilate it and fix it to your needs.
-# For example, if you download pride and prejudice from Project Gutenberg, you will see that the raws represent the line breaks of the book layout, rather than the sentences or paragraphs.
+# It could be that your texts has not the right structure. If so, you can manipulate it and fix it to your needs.
+
+# For example, if you download pride and prejudice from Project Gutenberg, you will see that the rows represent the line breaks of the book layout, rather than the sentences or paragraphs.
 # In such cases, we can merge the lines together, and then split them into sentences.
 
 pride2 <- gutenbergr::gutenberg_download(1342)
@@ -67,7 +68,7 @@ head(pride2)
 # YOUR TURN 1 ---------
 
 # can you create a corpus with another file in the samples folder?
-# Try importing the melville.txt file, and then split it into sentences.
+# Try importing the melville txt file, and then split it into sentences. Careful about the file names!
 
 
 

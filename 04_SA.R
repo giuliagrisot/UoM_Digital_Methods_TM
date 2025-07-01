@@ -74,10 +74,19 @@ get_sentiment("She was walking alone in a dark and eery night", language = "engl
 
 syuzhet::get_sent_values(char_v = c("I", "like", "apples", "and", "pears"), lexicon = "nrc")
 
-syuzhet_sent_values <- corpus_sentence %>%
-  group_by(sentence_id, sentence, doc_id) %>%
-  mutate(sentiment_syuzhet = get_sentiment(sentence)) %>%
-  ungroup()
+
+# We can also use the get_sentiment() function to extract the sentiment of a sentence, and it will return a data frame with the sentiment value for each sentence.
+# Let's apply the get_sentiment() function to our corpus_sentence data frame, and plot the sentiment values for each sentence in a specific document.
+# This can take a while, so only excecute the next line if you have really need to. Else, load the pre-computed values from the RData file.
+
+# syuzhet_sent_values <- corpus_sentence %>%
+#   group_by(sentence_id, sentence, doc_id) %>%
+#   mutate(sentiment_syuzhet = get_sentiment(sentence)) %>%
+#   ungroup()
+
+# save(syuzhet_sent_values, file = "syuzhet_sent_values.RData")
+load("syuzhet_sent_values.RData")
+
 
 # Tidy approach to SA ----------------
     

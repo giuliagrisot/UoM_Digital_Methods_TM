@@ -48,9 +48,10 @@ my_df <- data.frame(
 )
 View(my_df)
 
-### Your Turn (1)
+### Your Turn (1) -------------------
 
 # Create a new dataframe with different authors and nationalities. Careful with the syntax!
+
 my_new_df <- data.frame(
   author = 
   nationality = 
@@ -59,6 +60,7 @@ my_new_df <- data.frame(
 View(my_new_df)
 
 ### 2. Accessing Data
+
 # Accessing elements in R variables is crucial for data manipulation and analysis.
 # You can access elements in vectors, lists, and dataframes using indexing.
 
@@ -154,7 +156,7 @@ head(my_words)
 
 ### 5. Loops and Conditionals
 
-# Loop
+# Loops are used to repeat a block of code multiple times.
 for(i in 1:10){
   print(i)
 }
@@ -186,17 +188,16 @@ my_function <- function(x){
   cat("Ciao", x, "\n")
 }
 
-my_function("Simone")
-my_function("Giulia")
+my_function("Everyone!")
 
 ### Your Turn (6)
 
 # Function with two inputs
 teach_with <- function(name1, name2){
-  cat(name1, "is teaching R with", name2, "\n")
+  cat(name1, "is teaching Text Mining with", name2, "\n")
 }
 
-teach_with("Simone", "Giulia")
+teach_with("Giulia", "R")
 
 ### 7. Packages
 
