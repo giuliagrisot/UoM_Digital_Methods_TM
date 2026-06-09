@@ -1,4 +1,4 @@
-### Welcome to "Corpus Linguistics with R"!
+### Welcome to "Text analysis with R: corpus analysis"!
 
 # This R script was created by Dr. Giulia Grisot
 # In this script, we'll explore basic corpus linguistic techniques using a tokenised corpus
@@ -6,6 +6,13 @@
 # Then press Ctrl+Enter (Windows/Linux) or Cmd+Enter (Mac)
 
 # Load required packages
+required_packages <- c("tidyverse", "tidytext", "readtext", "quanteda")
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
 library(tidyverse)
 library(tidytext)
 library(readtext)
@@ -129,7 +136,7 @@ stopwords_en <- readtext("jockers_stopwords.txt") %>%
 # Plot top 20 frequent tokens (excluding stopwords if needed)
 token_freq %>%
   mutate(token = tolower(token)) %>%  # Convert tokens to lowercase for consistency
-  anti_join(stopwords_en) %>%  # Exclude common stopwords
+  anti_join(stopwords_en, by = "token") %>%  # Exclude common stopwords
   slice_max(n, n = 20) %>%
   ggplot(aes(x = reorder(token, n), y = n)) +
   geom_col(fill = "steelblue") +
@@ -144,7 +151,7 @@ corpus_token_sample %>% filter(token == "love") %>% nrow()
 # Count top 10 tokens used by a specific author (e.g. Woolf)
 corpus_token_sample %>%
   mutate(token = tolower(token)) %>%  # Convert tokens to lowercase for consistency
-  anti_join(stopwords_en) %>%  # Exclude common stopwords
+  anti_join(stopwords_en, by = "token") %>%  # Exclude common stopwords
   filter(grepl("Woolf", author)) %>%
   count(token, sort = TRUE) %>%
   head(10)
@@ -153,7 +160,7 @@ corpus_token_sample %>%
 # Count top 10 tokens used by a specific author (e.g. Dickens)
 corpus_token_sample %>%
   mutate(token = tolower(token)) %>%  # Convert tokens to lowercase for consistency
-  anti_join(stopwords_en) %>%  # Exclude common stopwords
+  anti_join(stopwords_en, by = "token") %>%  # Exclude common stopwords
   filter(grepl("Dickens", author)) %>%
   count(token, sort = TRUE) %>%
   head(10)
@@ -214,7 +221,7 @@ corpus_docs %>%
 
 # Concordance is a method to find occurrences of a word or phrase in context, allowing us to see how it is used in different sentences. This is also referred to as keyword in context (KWIC). Quanteda provides a convenient way to do this.
 
-corpus_q <- corpus(corpus_docs, text_field = "text")
+corpus_q <- quanteda::corpus(corpus_docs, text_field = "text")
 
 # save(corpus_q, file = "corpus_q.RData") # save the corpus for later use
 

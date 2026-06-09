@@ -1,4 +1,4 @@
-### Welcome to "Text Mining with R"!
+### Welcome to "Text analysis with R"!
 
 # This R script was created by Dr. Giulia Grisot
 # Everything written after a hashtag (#) is a comment and will not be executed
@@ -46,18 +46,18 @@ my_df <- data.frame(
   author = c("Shakespeare", "Dante", "Cervantes", "Pynchon"),
   nationality = c("English", "Italian", "Spanish", "American")
 )
-View(my_df)
+my_df
 
 ### Your Turn (1) -------------------
 
 # Create a new dataframe with different authors and nationalities. Careful with the syntax!
 
 my_new_df <- data.frame(
-  author = 
-  nationality = 
+  author = c("Austen", "Morrison"),
+  nationality = c("English", "American")
 )
 
-View(my_new_df)
+my_new_df
 
 ### 2. Accessing Data
 
@@ -76,6 +76,7 @@ my_string      # Whole string (not the first word)
 substr(my_string, 1, 5) # First five characters
 
 # Access elements in a character vector
+words <- strsplit(my_string, " ")[[1]]
 words[1]             # First word
 words[1:4]          # First four words
 words[c(1, 4)]      # First and fourth words
@@ -129,14 +130,13 @@ words[which(words == "be")[2]]
 
 ### 4. Reading and Writing Text Files
 
-# Working directory (where R reads and writes files)
+# Working directory (where R reads and writes files).
+# In RStudio/Posit Cloud, open the .Rproj file first. Then getwd() should show
+# the main project folder, where the samples folder is located.
 getwd()
-setwd("/cloud/project/scripts")
-getwd()
-setwd("/cloud/project")
 
 # Read text file line by line
-my_text <- readLines("scripts/samples/federer_pilatus_1912.txt")
+my_text <- readLines("samples/austen_pride_1813.txt", encoding = "UTF-8")
 head(my_text)
 
 # Collapse text into a single string
@@ -145,12 +145,12 @@ my_text <- paste(my_text, collapse = "\n")
 # Print and write text
 cat("The cat is on the table")
 cat("The cat is on the table", my_string)
-cat("The cat is on the table", file = "scripts/samples/Cat.txt")
+cat("The cat is on the table", file = "samples/Cat.txt")
 
 ### Your Turn (4)
 
 # Read another text file and split into words
-my_text <- readLines("scripts/samples/another_sample.txt")
+my_text <- readLines("samples/melville_moby_1851.txt", encoding = "UTF-8")
 my_words <- strsplit(paste(my_text, collapse = " "), " ")[[1]]
 head(my_words)
 

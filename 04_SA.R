@@ -1,11 +1,18 @@
 
 # SENTIMENT ANALYSIS ----------------
 
+required_packages <- c("tidyverse", "syuzhet", "tidytext")
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
 library(tidyverse)
 library(syuzhet)
 library(tidytext)
 
-# Now let's do some Sentiment Analysis (SA). SA is 
+# Now let's do some Sentiment Analysis (SA).
 
 load("corpus_token_sample.RData")
 load("corpus_sentence.RData")
@@ -57,6 +64,12 @@ syuzhet_nrc <- get_sentiment_dictionary("nrc", language = "english")
 
 syuzhet_en <- get_sentiment_dictionary("syuzhet", language = "english")
 
+# Joining a lexicon to a large token table can take a little while, especially
+# on Posit Cloud. We do it once and reuse the result below.
+corpus_sentiment_words <- corpus_token_sample %>%
+  mutate(word = tolower(token)) %>%
+  left_join(syuzhet_en, by = "word", relationship = "many-to-many")
+
 # Notice that these measure different things. unless you want to compare performances,
 # You might need to decide which lexicon works best for you, and be aware of how it was created.
 
@@ -96,11 +109,9 @@ load("syuzhet_sent_values.RData")
 
 library(tidytext)
 
-corpus_token_sample %>%
-  mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en, relationship = "many-to-many") %>%
+corpus_sentiment_words %>%
   group_by(author, title) %>%
-  summarise(sentiment_value = mean(value, na.rm=T)) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
   ungroup() %>%
   ggplot(aes(x=sentiment_value, y=reorder(title, sentiment_value), label=title)) +
   geom_bar(stat="identity", fill="steelblue") +
@@ -118,11 +129,9 @@ if (!requireNamespace("plotly", quietly = TRUE)) {
 
 library(plotly)
 
-p <- corpus_token_sample %>%
-  mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en, relationship = "many-to-many") %>%
+p <- corpus_sentiment_words %>%
   group_by(author, title) %>%
-  summarise(sentiment_value = mean(value, na.rm=T)) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(x=sentiment_value, y=reorder(title, sentiment_value), label=title)) +
   geom_bar(stat="identity", fill="steelblue") +
   # geom_label(size=3) +
@@ -136,11 +145,9 @@ ggplotly(p)
 
 # or per pub_year
 
-corpus_token_sample %>%
-  mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en) %>%
+corpus_sentiment_words %>%
   group_by(title, author, year) %>%
-  summarise(sentiment_value = mean(value, na.rm=T)) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(year, sentiment_value)) +
   geom_point(size=2) +
   geom_smooth(se = F) +
@@ -149,11 +156,9 @@ corpus_token_sample %>%
 
 # or interactive:
 
-p <- corpus_token_sample %>%
-  mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en) %>%
+p <- corpus_sentiment_words %>%
   group_by(title, author, year) %>%
-  summarise(sentiment_value = mean(value, na.rm=T)) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(year, sentiment_value)) +
   geom_point(size=2) +
   geom_smooth() +
@@ -168,11 +173,9 @@ remove(p)
 # Most times rather than full text sentiment, it is interesting to see how the sentiment changes within sentences.
 # We can for example fin out the most positive and negative sentences in our corpus, and plot them as heatmaps, highlighting the most positive and negative words within the sentences.
 
-corpus_token_sample %>%
-  mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en, relationship = "many-to-many") %>%
+corpus_sentiment_words %>%
   group_by(doc_id, sentence_id) %>%
-  summarise(value = sum(value, na.rm=T)) %>%
+  summarise(value = sum(value, na.rm = TRUE), .groups = "drop") %>%
   ungroup() %>%
   arrange(desc(value))
 
@@ -182,7 +185,7 @@ corpus_token_sample %>%
 test_sentence <- corpus_token_sample %>%
   filter(sentence_id == 212, doc_id == "ENG18670_Ouida") %>%
   mutate(word = tolower(token)) %>%
-  left_join(syuzhet_en, relationship = "many-to-many")
+  left_join(syuzhet_en, by = "word", relationship = "many-to-many")
 
 test_sentence %>%
   mutate(line_number = rep(1:ceiling(n() / 10), each = 10, length.out = n())) %>%
@@ -289,7 +292,8 @@ sentimentr_sent_values %>%
   ungroup() %>%
   left_join(corpus_sentence %>% 
               select(doc_id, author, title, year) %>%
-              distinct()) %>%
+              distinct(),
+            by = "doc_id") %>%
   ggplot(aes(x=sentiment_value, y=reorder(title, sentiment_value), label=title)) +
   geom_bar(stat="identity", fill="steelblue") +
   # geom_label(size=3) +
@@ -297,5 +301,3 @@ sentimentr_sent_values %>%
         # axis.text.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1)) +
   coord_flip()
-
-

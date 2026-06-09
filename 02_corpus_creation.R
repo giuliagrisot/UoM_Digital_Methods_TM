@@ -10,8 +10,11 @@
 # Before you begin you will need to load some packages. These allow you to execute specific operations.
 # If you have not done so already, you have to install them first: it might take a few minutes and you only have to do it once. If R asks you whether you want to install dependencies for the packages, say yes.
 
-if (!requireNamespace(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet", "quanteda", "sjPlot", "wordcloud"), quietly = TRUE)) {
-  install.packages(c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet", "quanteda", "sjPlot", "wordcloud"))
+required_packages <- c("tidyverse", "tidytext", "readtext", "readxl", "syuzhet", "quanteda")
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
 }
 
 # After you have installed the packages, you can load them with the library function. You will need to do this every time you start a new R session.
@@ -51,9 +54,9 @@ pride <- read.delim("samples/austen_pride_1813.txt", # this is the url to your f
 # For example, if you download pride and prejudice from Project Gutenberg, you will see that the rows represent the line breaks of the book layout, rather than the sentences or paragraphs.
 # In such cases, we can merge the lines together, and then split them into sentences.
 
-pride2 <- gutenbergr::gutenberg_download(1342)
+pride2 <- readLines("samples/austen_pride_1813.txt", encoding = "UTF-8")
 
-pride2 <- paste(pride2$text, collapse = " ") %>% # this merges all lines together
+pride2 <- paste(pride2, collapse = " ") %>% # this merges all lines together
   as.data.frame() %>% # this converts it into a dataframe
   rename(text = ".") %>% # and we rename the column
   mutate(text = str_squish(text)) %>% # this removes unwanted extra spaces
@@ -183,5 +186,4 @@ head(pride_excel)
 corpus_source <- readtext("samples/*.xlsx") # here we are looking for all xlsx files in the samples folder
 
 head(corpus_source)
-
 
