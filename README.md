@@ -2,21 +2,24 @@
 
 Material for the University of Manchester Digital Methods Summer School 2026.
 
-This repository contains the scripts and prepared data for the course sequence:
+This repository contains Quarto notebooks, R scripts, and prepared data for the
+course sequence:
 
 1. Introduction to R for text analysis
 2. Corpus creation
 3. Corpus analysis
 4. Sentiment analysis
+5. Word vectors and thematic neighbourhoods
 
-The scripts are designed to work in a local RStudio installation and in Posit
-Cloud. For the smoothest setup, open `UoM_Digital_Methods_TM.Rproj` first so
-that R uses the repository folder as the working directory.
+The notebooks and scripts are designed to work in a local RStudio installation
+and in Posit Cloud. For the smoothest setup, open
+`UoM_Digital_Methods_TM.Rproj` first so that R uses the repository folder as the
+working directory.
 
 ## Setup
 
-The main teaching scripts install missing packages when needed. If you prefer to
-install everything before class, run:
+The main teaching notebooks install missing packages when needed. If you prefer
+to install everything before class, run:
 
 ```r
 install.packages(c(
@@ -27,7 +30,8 @@ install.packages(c(
   "syuzhet",
   "quanteda",
   "plotly",
-  "sentimentr"
+  "sentimentr",
+  "text2vec"
 ))
 ```
 
@@ -36,19 +40,34 @@ large corpus objects and sentiment scores are already included as `.RData` files
 so students can inspect the workflow without having to recreate the slowest
 processing steps during class.
 
+## Using the Notebooks
+
+Open the `.qmd` files in RStudio or Posit Cloud and run the code chunks in
+order. Rendering the notebooks is optional; during the workshop, the main aim is
+to execute, inspect, and adapt the code step by step.
+
 ## Course Sequence
 
-- `01_intro.R`: R basics, data structures, reading and writing text files.
-- `02_corpus_creation.R`: creating a corpus from text and spreadsheet files,
+- `01_intro.qmd`: R basics, data structures, reading and writing text files.
+- `02_corpus_creation.qmd`: creating a corpus from text and spreadsheet files,
   adding metadata, splitting texts into sentences and tokens.
-- `03_corpus_analysis.R`: inspecting the corpus, checking frequencies,
+- `03_corpus_analysis.qmd`: inspecting the corpus, checking frequencies,
   stopwords, collocations, concordances, and word patterns over time.
-- `04_SA.R`: sentiment analysis using lexicons and precomputed corpus objects.
+- `04_sentiment_analysis.qmd`: sentiment analysis using lexicons and
+  precomputed corpus objects.
+- `05_word_vectors.qmd`: word-vector analysis for exploring thematic
+  neighbourhoods and comparing how selected themes are represented in the
+  corpus.
+
+The `basic_R_scripts/` folder contains companion runnable `.R` scripts with the
+same core workflow. The `.qmd` files are the most student-facing version because
+they combine explanation, code, outputs, and short exercises.
 
 Corpus creation and corpus analysis are central to the course. They shape what
-sentiment analysis can and cannot tell us: the files selected, metadata added,
+later analyses can and cannot tell us: the files selected, metadata added,
 tokenisation choices, stopword lists, sampling decisions, and precomputed data
-all affect the results.
+all affect the results of sentiment analysis, word-vector analysis, and any
+other computational method.
 
 ## Limits and Implications
 
@@ -64,5 +83,12 @@ lexicon, language, genre, historical period, negation handling, and the unit of
 analysis. Corpus analysis should therefore be used before and alongside
 sentiment analysis to identify biases, errors, absences, and interpretive limits.
 
-`05_space.R` and `09_word_contexts.R` are exploratory extension scripts rather
-than core material for the renamed course.
+Word vectors are useful for exploring semantic neighbourhoods: which words tend
+to appear in similar contexts, and how a theme such as space, gender, power, or
+emotion is distributed across a corpus. They are also shaped by corpus selection,
+frequency thresholds, context windows, and model parameters. Treat word-vector
+results as prompts for interpretation rather than as final evidence, and check
+important patterns through concordances and close reading.
+
+`basic_R_scripts/06_space.R` and `basic_R_scripts/09_word_contexts.R` are older
+exploratory extension scripts.

@@ -1,0 +1,384 @@
+---
+title: "04. Sentiment Analysis"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This notebook introduces lexicon-based sentiment analysis. We will compare sentiment methods, join a sentiment lexicon to corpus tokens, visualise sentiment across texts, inspect sentiment in sentences, and consider negation.
+
+Sentiment analysis does not directly measure meaning, emotion, or reader response. It is a method for producing interpretable patterns that need to be checked against text and context.
+
+```{r}
+# List the packages needed for sentiment analysis.
+required_packages <- c("tidyverse", "syuzhet", "tidytext", "plotly", "sentimentr")
+
+# Find which packages are missing from this R installation.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install only the missing packages.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load the core packages for this notebook.
+library(tidyverse)
+library(syuzhet)
+library(tidytext)
+```
+
+## Load the Corpus
+
+```{r}
+# Load the token-level corpus used for lexicon matching.
+load("corpus_token_sample.RData")
+
+# Load the sentence-level corpus used for sentence plots.
+load("corpus_sentence.RData")
+```
+
+Check what documents are present.
+
+```{r}
+# Show each author/document/year combination once.
+corpus_sentence %>%
+  distinct(author, doc_id, year)
+```
+
+```{r}
+# Do the same check in the token-level corpus.
+corpus_token_sample %>%
+  distinct(author, doc_id, year)
+```
+
+How many authors are represented?
+
+```{r}
+# Select unique author names, then count them.
+corpus_token_sample %>%
+  distinct(author) %>%
+  nrow()
+```
+
+### Your Turn
+
+Which years are present, and how many unique years are there?
+
+```{r}
+# List the unique years in order.
+corpus_token_sample %>%
+  distinct(year) %>%
+  arrange(year)
+```
+
+```{r}
+# Count how many unique years are present.
+corpus_token_sample %>%
+  distinct(year) %>%
+  nrow()
+```
+
+## Sentiment Lexicons
+
+A sentiment lexicon is a list of words with associated sentiment values or categories.
+
+```{r}
+# Load the NRC sentiment dictionary through syuzhet.
+syuzhet_nrc <- get_sentiment_dictionary("nrc", language = "english")
+
+# Load the syuzhet sentiment dictionary.
+syuzhet_en <- get_sentiment_dictionary("syuzhet", language = "english")
+
+# Inspect the first rows of the lexicon.
+head(syuzhet_en)
+```
+
+Different lexicons can produce different results.
+
+```{r}
+# Score the same sentence with different lexicon methods.
+# Different methods can produce different scores.
+get_sentiment("I like apples and pears", language = "english", method = "syuzhet")
+get_sentiment("I like apples and pears", language = "english", method = "bing")
+get_sentiment("I like apples and pears", language = "english", method = "nrc")
+get_sentiment("I like apples and pears", language = "english", method = "afinn")
+```
+
+```{r}
+# Score a sentence with darker affective language.
+get_sentiment("She was walking alone in a dark and eerie night", language = "english", method = "syuzhet")
+```
+
+## Join the Lexicon to the Corpus
+
+Joining a lexicon to a large token table can take time. We do it once and reuse the result.
+
+```{r}
+# Start with the token-level corpus.
+corpus_sentiment_words <- corpus_token_sample %>%
+  # Create a lowercase word column so it matches the lexicon format.
+  mutate(word = tolower(token)) %>%
+  # Join sentiment values onto matching words.
+  # Words not found in the lexicon receive NA for value.
+  left_join(syuzhet_en, by = "word", relationship = "many-to-many")
+
+# Inspect the joined data.
+head(corpus_sentiment_words)
+```
+
+## Average Sentiment by Text
+
+```{r}
+# Group words by author and title so we can summarise each text.
+sentiment_by_text <- corpus_sentiment_words %>%
+  group_by(author, title) %>%
+  # Average the sentiment values, ignoring words with no lexicon value.
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Print the resulting text-level sentiment table.
+sentiment_by_text
+```
+
+```{r}
+# Plot the text-level sentiment table.
+sentiment_by_text %>%
+  # Put sentiment on the x-axis and order titles by their score.
+  ggplot(aes(x = sentiment_value, y = reorder(title, sentiment_value))) +
+  # Draw one bar per title.
+  geom_col(fill = "steelblue") +
+  # Flip coordinates so long titles are easier to read.
+  coord_flip() +
+  labs(
+    title = "Average Sentiment by Text",
+    x = "Average sentiment value",
+    y = "Title"
+  )
+```
+
+Optional interactive version:
+
+```{r}
+# Load plotly for interactive plots.
+library(plotly)
+
+# Build a ggplot object first.
+p <- sentiment_by_text %>%
+  ggplot(aes(
+    x = sentiment_value,
+    y = reorder(title, sentiment_value),
+    # This text will appear in the interactive tooltip.
+    text = paste(author, title, sep = ": ")
+  )) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(x = "Average sentiment value", y = "Title")
+
+# Convert the ggplot into an interactive plotly plot.
+ggplotly(p, tooltip = "text")
+```
+
+## Sentiment by Year
+
+```{r}
+# Group by title, author, and year so each point represents one text.
+sentiment_by_year <- corpus_sentiment_words %>%
+  group_by(title, author, year) %>%
+  # Average sentiment values within each text.
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Plot publication year against average sentiment.
+sentiment_by_year %>%
+  ggplot(aes(x = year, y = sentiment_value)) +
+  geom_point(size = 2) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Average Sentiment by Publication Year",
+    x = "Year",
+    y = "Average sentiment value"
+  )
+```
+
+## Positive and Negative Sentences
+
+Calculate sentiment values by sentence.
+
+```{r}
+# Group by document and sentence so each row becomes one sentence score.
+sentence_sentiment <- corpus_sentiment_words %>%
+  group_by(doc_id, sentence_id, title, author) %>%
+  # Add together sentiment values for all matched words in a sentence.
+  summarise(value = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  # Put the most positive sentences at the top.
+  arrange(desc(value))
+
+# Show the most positive sentences.
+head(sentence_sentiment, 10)
+```
+
+```{r}
+# Show the most negative sentences.
+tail(sentence_sentiment, 10)
+```
+
+## Inspect One Sentence
+
+Choose one sentence and show which words contributed to the score.
+
+```{r}
+# Select one sentence from one document.
+test_sentence <- corpus_token_sample %>%
+  filter(sentence_id == 212, doc_id == "ENG18670_Ouida") %>%
+  # Lowercase tokens so they match the lexicon.
+  mutate(word = tolower(token)) %>%
+  # Add sentiment values for matched words.
+  left_join(syuzhet_en, by = "word", relationship = "many-to-many")
+
+# Show each token and its sentiment value.
+test_sentence %>%
+  select(token, value) %>%
+  head(20)
+```
+
+```{r}
+# Start with the selected sentence.
+test_sentence %>%
+  mutate(
+    # Break the sentence into lines of ten tokens for plotting.
+    line_number = rep(1:ceiling(n() / 10), each = 10, length.out = n()),
+    # Give each token a position from 1 to 10 within each plotted line.
+    token_position = rep(1:10, length.out = n())
+  ) %>%
+  # Plot token position horizontally and line number vertically.
+  ggplot(aes(x = token_position, y = -line_number, fill = value)) +
+  # Draw one tile behind each token.
+  geom_tile() +
+  # Print the token text on top of each tile.
+  geom_text(aes(label = token), size = 3) +
+  # Use colour to show sentiment value; grey means no sentiment match.
+  scale_fill_viridis_c(na.value = "grey90") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Sentiment Values Within One Sentence",
+    subtitle = paste0(test_sentence$title[1], " by ", test_sentence$author[1])
+  )
+```
+
+### Your Turn
+
+Find the most negative sentence in `sentence_sentiment`, then inspect its words.
+
+## Sentiment Over Narrative Time
+
+We can also plot sentence-level sentiment across one document.
+
+```{r}
+# Start from the sentence-level corpus.
+corpus_sentence %>%
+  # Keep one document for a narrative-time example.
+  filter(doc_id == "ENG18471_Bronte") %>%
+  # Calculate a syuzhet sentiment score for each sentence.
+  mutate(sentiment_syuzhet = get_sentiment(sentence)) %>%
+  # Plot sentiment against sentence order.
+  ggplot(aes(x = sentence_id, y = sentiment_syuzhet)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Sentence Sentiment Across One Text",
+    x = "Sentence ID",
+    y = "Sentiment value"
+  )
+```
+
+## Negation with `sentimentr`
+
+Lexicon approaches can struggle with negation. The `sentimentr` package handles negation more explicitly.
+
+```{r}
+# Load sentimentr for negation-sensitive sentiment scoring.
+library(sentimentr)
+
+# Score a positive sentence.
+sentiment("I like apples and pears")
+
+# Score a similar sentence with negation.
+sentiment("I don't like apples and pears")
+```
+
+The full `sentimentr` calculation has been precomputed for the class.
+
+```{r}
+# Load the precomputed sentimentr results.
+load("sentimentr_sent_values.RData")
+
+# Inspect the first rows.
+head(sentimentr_sent_values)
+```
+
+```{r}
+# Start from the precomputed sentence-level sentiment table.
+sentimentr_sent_values %>%
+  # Keep one document for the example plot.
+  filter(doc_id == "ENG18471_Bronte") %>%
+  # Plot sentence order against sentiment value.
+  ggplot(aes(x = sentence_id, y = sentiment_value)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Sentence Sentiment with sentimentr",
+    subtitle = "Negation-sensitive polarity scores",
+    x = "Sentence ID",
+    y = "Sentiment value"
+  )
+```
+
+Compare average sentiment by document using `sentimentr`.
+
+```{r}
+# Start from sentence-level sentimentr values.
+sentimentr_sent_values %>%
+  # Group by document.
+  group_by(doc_id) %>%
+  # Average sentence scores into one document-level score.
+  summarise(sentiment_value = mean(sentiment_value, na.rm = TRUE), .groups = "drop") %>%
+  # Add document metadata back in.
+  left_join(
+    corpus_sentence %>%
+      distinct(doc_id, author, title, year),
+    by = "doc_id"
+  ) %>%
+  # Plot one bar per title.
+  ggplot(aes(x = sentiment_value, y = reorder(title, sentiment_value))) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Average Document Sentiment with sentimentr",
+    x = "Average sentiment value",
+    y = "Title"
+  )
+```
+
+## Takeaway
+
+Sentiment analysis can show broad affective patterns, but it is limited by:
+
+- lexicon choice
+- historical language
+- genre and narrative voice
+- negation
+- irony
+- the unit of analysis
+
+Treat sentiment scores as prompts for interpretation, not final conclusions.

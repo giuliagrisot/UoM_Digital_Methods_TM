@@ -1,0 +1,314 @@
+---
+title: "05. Word Vectors and Thematic Neighbourhoods"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This notebook introduces word vectors as a way to explore thematic neighbourhoods in a corpus.
+
+Word vectors do not discover meaning by themselves. They model words according to the contexts in which they appear. For humanities research, they are useful because they can suggest associations around a theme that we can then check through concordance and close reading.
+
+```{r}
+# List the packages used in this notebook.
+required_packages <- c("tidyverse", "text2vec", "tidytext")
+
+# Check which packages are not installed.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install missing packages only.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load packages for data work, word-vector modelling, and plotting helpers.
+library(tidyverse)
+library(text2vec)
+library(tidytext)
+```
+
+## Load the Corpus
+
+We use the document-level corpus because word-vector models need each document as a sequence of words.
+
+```{r}
+# Load the document-level corpus.
+load("corpus_docs.RData")
+
+# Inspect the columns and data types.
+glimpse(corpus_docs)
+```
+
+## Prepare a Corpus Sample
+
+The prepared corpus is small enough for this class exercise, but the parameter below makes it easy to reduce the number of documents if Posit Cloud is slow.
+
+```{r}
+# Choose how many documents to use.
+# Use a smaller number if Posit Cloud is slow.
+n_documents <- 100
+
+# Set a seed so the model is more reproducible.
+set.seed(123)
+
+# Prepare the texts for modelling.
+corpus_for_vectors <- corpus_docs %>%
+  # Sort documents so the sample is stable.
+  arrange(year, doc_id) %>%
+  # Keep the first n_documents documents.
+  slice_head(n = n_documents) %>%
+  # Lowercase the text so "City" and "city" are treated alike.
+  mutate(text = str_to_lower(text))
+
+# Show the documents included in the model sample.
+corpus_for_vectors %>%
+  select(doc_id, title, author, year) %>%
+  head()
+```
+
+## Tokenise the Texts
+
+The `text2vec` workflow starts with tokenising the text. Here, tokens are words.
+
+```{r}
+# Split each document into word tokens.
+tokens <- word_tokenizer(corpus_for_vectors$text)
+
+# Create an iterator for text2vec.
+# The iterator streams tokens efficiently into later modelling steps.
+it <- itoken(
+  tokens,
+  # Use document IDs as labels.
+  ids = corpus_for_vectors$doc_id,
+  # Hide the progress bar to keep notebook output tidy.
+  progressbar = FALSE
+)
+```
+
+## Build a Vocabulary
+
+The vocabulary is the set of words the model will know. Removing very rare words keeps the exercise faster and less noisy, but it can also remove interesting terms.
+
+```{r}
+# Create a vocabulary from the token iterator.
+vocab <- create_vocabulary(it, stopwords = tidytext::stop_words$word) %>%
+  # Keep only words that occur at least 20 times.
+  # This removes very rare words and keeps the model smaller.
+  prune_vocabulary(term_count_min = 20)
+
+# Inspect the most frequent words in the vocabulary.
+vocab %>%
+  arrange(desc(term_count)) %>%
+  head(20)
+```
+
+## Build a Term Co-Occurrence Matrix
+
+The term co-occurrence matrix records which words appear near each other. The `skip_grams_window` parameter controls the size of the context window.
+
+```{r}
+# Create a vectorizer, which maps vocabulary terms to matrix columns.
+vectorizer <- vocab_vectorizer(vocab)
+
+# Build a term co-occurrence matrix.
+# This records which words appear near each other.
+tcm <- create_tcm(
+  it,
+  vectorizer,
+  # Look five words to the left and right as context.
+  skip_grams_window = 5
+)
+```
+
+## Train Word Vectors
+
+We use a modest GloVe model so that the notebook runs quickly in class.
+
+```{r}
+# Create a GloVe model.
+# rank = 50 means each word will be represented with 50 numbers.
+glove <- GlobalVectors$new(rank = 50, x_max = 10)
+
+# Fit the model to the term co-occurrence matrix.
+main_vectors <- glove$fit_transform(
+  tcm,
+  # Use a small number of iterations so the notebook runs quickly.
+  n_iter = 8,
+  convergence_tol = 0.01
+)
+
+# Extract the context vectors learned by the model.
+context_vectors <- glove$components
+
+# Combine main and context vectors into one word-vector matrix.
+word_vectors <- main_vectors + t(context_vectors)
+```
+
+## A Helper Function
+
+This function finds words that are close to one or more target terms.
+
+```{r}
+# Define a function so we can reuse the same similarity workflow.
+nearest_words <- function(target_terms, word_vectors, n = 20) {
+  # Keep only target terms that exist in the model vocabulary.
+  available_terms <- intersect(target_terms, rownames(word_vectors))
+
+  # Stop with a helpful message if none of the seed words are available.
+  if (length(available_terms) == 0) {
+    stop("None of the target terms are in the vocabulary. Try more common words.")
+  }
+
+  # Average the vectors for all available target terms.
+  # This creates one vector representing the theme.
+  target_vector <- colMeans(word_vectors[available_terms, , drop = FALSE])
+
+  # Calculate cosine similarity between every word and the theme vector.
+  similarities <- sim2(
+    x = word_vectors,
+    y = matrix(target_vector, nrow = 1),
+    method = "cosine",
+    norm = "l2"
+  )[, 1]
+
+  # Convert the similarity scores into a tibble for easier reading.
+  tibble(
+    word = names(similarities),
+    similarity = as.numeric(similarities)
+  ) %>%
+    # Remove the original target words from the results.
+    filter(!word %in% available_terms) %>%
+    # Put the nearest words at the top.
+    arrange(desc(similarity)) %>%
+    # Keep the requested number of nearest words.
+    slice_head(n = n)
+}
+```
+
+## Example 1: A Spatial Theme
+
+We begin with several seed words related to space.
+
+```{r}
+# Define seed terms for a spatial theme.
+space_terms <- c("city", "town", "street", "house", "room")
+
+# Find the 20 words closest to that group of seed terms.
+nearest_words(space_terms, word_vectors, n = 20)
+```
+
+Interpretive questions:
+
+- Which words are expected?
+- Which words are surprising?
+- Are these associations about geography, class, movement, domesticity, or something else?
+- Which results should be checked with KWIC?
+
+## Example 2: Compare Two Theme Vocabularies
+
+Here we compare an urban vocabulary with a rural vocabulary.
+
+```{r}
+# Define seed terms for two related but different spatial themes.
+urban_terms <- c("city", "town", "street")
+rural_terms <- c("country", "field", "garden")
+
+# Build one results table by stacking two nearest-word searches.
+theme_neighbours <- bind_rows(
+  # Find words near the urban seed terms.
+  nearest_words(urban_terms, word_vectors, n = 15) %>%
+    mutate(theme = "urban: city/town/street"),
+  # Find words near the rural seed terms.
+  nearest_words(rural_terms, word_vectors, n = 15) %>%
+    mutate(theme = "rural: country/field/garden")
+)
+
+# Print the combined results.
+theme_neighbours
+```
+
+```{r}
+# Start from the nearest-neighbour results.
+theme_neighbours %>%
+  # Work separately within each theme.
+  group_by(theme) %>%
+  # Reorder words by similarity inside each facet.
+  mutate(word = reorder_within(word, similarity, theme)) %>%
+  # Remove grouping before plotting.
+  ungroup() %>%
+  # Plot similarity scores as horizontal bars.
+  ggplot(aes(x = similarity, y = word, fill = theme)) +
+  geom_col(show.legend = FALSE) +
+  # Put urban and rural results in separate panels.
+  facet_wrap(~ theme, scales = "free_y") +
+  # Clean up the reordered facet labels.
+  scale_y_reordered() +
+  labs(
+    title = "Words Associated With Two Spatial Themes",
+    subtitle = "Use these results as prompts for interpretation, then check examples in context",
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+## Your Turn
+
+Choose a theme relevant to your own research.
+
+Possible examples:
+
+- gender: `c("woman", "mother", "daughter")` and `c("man", "father", "son")`
+- emotion: `c("joy", "happy", "pleasure")` and `c("grief", "sad", "sorrow")`
+- power: `c("king", "lord", "master")` and `c("servant", "poor", "child")`
+
+Replace the seed terms below.
+
+```{r}
+# Replace these seed words with terms from your own research.
+theme_a <- c("woman", "mother", "daughter")
+theme_b <- c("man", "father", "son")
+
+# Compare nearest neighbours for the two themes.
+bind_rows(
+  # Find words near the first theme.
+  nearest_words(theme_a, word_vectors, n = 10) %>%
+    mutate(theme = "theme A"),
+  # Find words near the second theme.
+  nearest_words(theme_b, word_vectors, n = 10) %>%
+    mutate(theme = "theme B")
+)
+```
+
+## Interpret With Care
+
+Word-vector results depend on:
+
+- the corpus
+- the vocabulary threshold
+- stopword removal
+- the context window
+- model parameters
+- frequency in the corpus
+
+The model suggests associations. It does not explain them. Use KWIC and close reading to examine the contexts behind the results.
+
+## Takeaway
+
+Word vectors are useful for thematic exploration:
+
+- start with seed terms
+- inspect semantic neighbours
+- compare themes
+- identify surprises
+- return to examples in context
+- make claims carefully

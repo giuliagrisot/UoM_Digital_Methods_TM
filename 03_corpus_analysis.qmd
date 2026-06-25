@@ -1,0 +1,370 @@
+---
+title: "03. Corpus Analysis"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This notebook introduces core corpus analysis methods:
+
+- inspecting corpus structure
+- counting words
+- removing stopwords
+- comparing authors
+- finding n-grams
+- using concordances / KWIC
+- tracing word frequencies over time
+- finding co-occurrence in sentences
+
+The notebook uses precomputed `.RData` objects so that students can work quickly in RStudio or Posit Cloud.
+
+```{r}
+# List the packages used in this notebook.
+required_packages <- c("tidyverse", "tidytext", "readtext", "quanteda")
+
+# Identify packages that are not installed.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install only missing packages.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load the packages.
+library(tidyverse)
+library(tidytext)
+library(readtext)
+library(quanteda)
+```
+
+## Load the Prepared Corpus
+
+The repository includes three prepared corpus objects:
+
+- `corpus_token_sample`: one row per token
+- `corpus_sentence`: one row per sentence
+- `corpus_docs`: one row per document
+
+```{r}
+# Load the token-level corpus: one row per token.
+load("corpus_token_sample.RData")
+
+# Load the sentence-level corpus: one row per sentence.
+load("corpus_sentence.RData")
+
+# Load the document-level corpus: one row per full text.
+load("corpus_docs.RData")
+```
+
+## Inspect the Data
+
+Always inspect a corpus before analysing it.
+
+```{r}
+# Show the structure of the token-level corpus.
+# This tells us the column names and data types.
+glimpse(corpus_token_sample)
+```
+
+```{r}
+# Print the first rows so we can see what the data looks like.
+head(corpus_token_sample)
+```
+
+Basic corpus size:
+
+```{r}
+# Count the total number of token rows.
+nrow(corpus_token_sample)
+
+# Count the number of unique word forms.
+length(unique(corpus_token_sample$token))
+
+# Count the number of unique authors.
+length(unique(corpus_token_sample$author))
+```
+
+For this session, keep only the columns we need most often.
+
+```{r}
+# Keep only the columns needed for the exercises below.
+corpus_token_sample <- corpus_token_sample %>%
+  select(doc_id, sentence, token, sentence_id, title, author, year)
+```
+
+## Word Frequencies
+
+The simplest question is: which words occur most often?
+
+```{r}
+# Count how often each token appears.
+# sort = TRUE puts the most frequent tokens at the top.
+token_freq <- corpus_token_sample %>%
+  count(token, sort = TRUE)
+
+# Print the 20 most frequent tokens.
+head(token_freq, 20)
+```
+
+Many of the most frequent words are function words. Stopword lists help remove common words, but they are always a methodological choice.
+
+```{r}
+# Read the stopword list from a text file.
+stopwords_en <- readtext("jockers_stopwords.txt") %>%
+  # Split the stopword text into one word per row.
+  unnest_tokens(input = "text", output = "stopword") %>%
+  # Create a lowercase token column to match against the corpus.
+  mutate(token = tolower(stopword)) %>%
+  # Keep only the column needed for joining/filtering.
+  select(token)
+```
+
+```{r}
+# Start from the token frequency table.
+token_freq %>%
+  # Convert tokens to lowercase so "The" and "the" are treated alike.
+  mutate(token = tolower(token)) %>%
+  # Remove tokens that appear in the stopword list.
+  anti_join(stopwords_en, by = "token") %>%
+  # Keep the 20 most frequent remaining tokens.
+  slice_max(n, n = 20) %>%
+  # Put token frequency on a bar chart.
+  ggplot(aes(x = reorder(token, n), y = n)) +
+  geom_col(fill = "steelblue") +
+  # Flip the chart so token labels are easier to read.
+  coord_flip() +
+  labs(
+    title = "Top 20 Tokens After Stopword Removal",
+    x = "Token",
+    y = "Frequency"
+  )
+```
+
+### Your Turn
+
+How many times does `"love"` appear?
+
+```{r}
+# Keep only rows where the token is exactly "love".
+corpus_token_sample %>%
+  filter(token == "love") %>%
+  # Count the remaining rows.
+  nrow()
+```
+
+Compare top words for different authors.
+
+```{r}
+# Define a reusable function for finding frequent words by author.
+top_tokens_by_author <- function(author_pattern, n_terms = 10) {
+  # Start from the token-level corpus.
+  corpus_token_sample %>%
+    # Lowercase tokens for consistency.
+    mutate(token = tolower(token)) %>%
+    # Remove stopwords.
+    anti_join(stopwords_en, by = "token") %>%
+    # Keep authors whose names match the pattern.
+    filter(str_detect(author, author_pattern)) %>%
+    # Count token frequency.
+    count(token, sort = TRUE) %>%
+    # Keep the top results.
+    slice_head(n = n_terms)
+}
+
+# Run the function for Woolf.
+top_tokens_by_author("Woolf")
+```
+
+```{r}
+# Run the same function for Dickens.
+top_tokens_by_author("Dickens")
+```
+
+Try another author:
+
+```{r}
+# Try a pattern that matches several author names.
+top_tokens_by_author("Austen|Bronte|Eliot")
+```
+
+## N-Grams and Collocations
+
+N-grams are sequences of words. They can help identify repeated phrases.
+
+```{r}
+# Start from the document-level corpus.
+ngrams <- corpus_docs %>%
+  # Split each document into 4-word sequences.
+  unnest_ngrams(input = text, output = ngram, n = 4) %>%
+  # Count each repeated 4-word sequence.
+  count(ngram, sort = TRUE) %>%
+  # Keep only phrases that appear more than 10 times.
+  filter(n > 10)
+
+# Print the most frequent n-grams.
+head(ngrams, 20)
+```
+
+Compare repeated phrases for selected authors.
+
+```{r}
+# Start from the document-level corpus.
+corpus_docs %>%
+  # Keep only selected authors for comparison.
+  filter(str_detect(author, "Woolf|Dickens|Brontë|Carroll")) %>%
+  # Calculate n-grams separately for each author.
+  group_by(author) %>%
+  # Split each author's texts into 4-word sequences.
+  unnest_ngrams(input = text, output = ngram, n = 4) %>%
+  # Count repeated n-grams.
+  count(ngram, sort = TRUE) %>%
+  # Keep the first three rows per author group.
+  slice_head(n = 3)
+```
+
+### Your Turn
+
+Change `n = 4` to `n = 2` or `n = 3`. What different kinds of phrases become visible?
+
+## Concordance / KWIC
+
+A concordance shows a search term in context. KWIC means "keyword in context."
+
+```{r}
+# Convert the document-level data frame into a quanteda corpus.
+corpus_q <- quanteda::corpus(corpus_docs, text_field = "text")
+
+# Tokenise the quanteda corpus.
+corpus_q_tokens <- tokens(
+  corpus_q,
+  # Remove punctuation marks.
+  remove_punct = TRUE,
+  # Remove symbols.
+  remove_symbols = TRUE
+) %>%
+  # Lowercase all tokens.
+  tokens_tolower()
+```
+
+Search for one word.
+
+```{r}
+# Search for the word "power" with three words of context on each side.
+kwic(corpus_q_tokens, pattern = "power", window = 3) %>%
+  # Convert the result to a regular data frame for display.
+  as.data.frame() %>%
+  # Show the first ten results.
+  head(10)
+```
+
+Search for word forms with a wildcard.
+
+```{r}
+# Search for words beginning with "beaut", such as beauty or beautiful.
+kwic(corpus_q_tokens, pattern = "beaut*", window = 3) %>%
+  as.data.frame() %>%
+  head(10)
+```
+
+Search for a phrase.
+
+```{r}
+# Search for the phrase "married man".
+# phrase() tells quanteda to treat the words as a phrase, not separate terms.
+kwic(corpus_q_tokens, pattern = phrase("married man"), window = 3) %>%
+  as.data.frame() %>%
+  head(10)
+```
+
+### Your Turn
+
+Try another word, phrase, or wildcard. Change `window` to see more or less context.
+
+## Frequency Over Time
+
+If metadata includes dates, we can ask how word frequency changes over time.
+
+```{r}
+# Make sure year is numeric so it can be plotted on a continuous x-axis.
+corpus_token_sample <- corpus_token_sample %>%
+  mutate(year = as.numeric(year))
+```
+
+```{r}
+# Start from the token-level corpus.
+corpus_token_sample %>%
+  # Keep only rows where the token is "war".
+  filter(token == "war") %>%
+  # Count how many times it appears in each year.
+  count(year) %>%
+  # Plot year on the x-axis and frequency on the y-axis.
+  ggplot(aes(x = year, y = n)) +
+  geom_line(color = "darkred") +
+  labs(
+    title = "Frequency of 'war' Over Time",
+    x = "Year",
+    y = "Frequency"
+  )
+```
+
+```{r}
+# Repeat the same workflow for the word "myself".
+corpus_token_sample %>%
+  filter(token == "myself") %>%
+  count(year) %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line(color = "steelblue") +
+  labs(
+    title = "Frequency of 'myself' Over Time",
+    x = "Year",
+    y = "Frequency"
+  )
+```
+
+### Your Turn
+
+Plot a different word, such as `"peace"`, `"love"`, or a term from your own research.
+
+## Co-Occurrence Within Sentences
+
+Co-occurrence asks whether two terms appear in the same context unit. Here the context unit is the sentence.
+
+```{r}
+# Start from the sentence-level corpus.
+co_occurrence <- corpus_sentence %>%
+  # Keep sentences containing "war".
+  filter(
+    str_detect(sentence, regex("war", ignore_case = TRUE)),
+    # Also keep only those that contain "peace".
+    str_detect(sentence, regex("peace", ignore_case = TRUE))
+  ) %>%
+  # Keep the identifying columns and the sentence text.
+  select(doc_id, sentence_id, sentence)
+
+# Display the first ten matching sentences.
+head(co_occurrence, 10)
+```
+
+### Your Turn
+
+Try another pair of words. What does the sentence context reveal that a frequency count would not?
+
+## Takeaway
+
+Corpus analysis helps us move between scale and context:
+
+- counts show patterns
+- stopwords and metadata shape the result
+- n-grams and collocations suggest repeated associations
+- KWIC returns us to language in context
+- time-based plots depend on metadata
+- co-occurrence can identify sentences for close reading

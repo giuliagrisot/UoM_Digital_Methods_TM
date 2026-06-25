@@ -1,0 +1,283 @@
+---
+title: "02. Corpus Creation"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This notebook shows how texts become a corpus that can be analysed in R. We import files, add metadata from filenames, split texts into sentences and tokens, and inspect the resulting data.
+
+Corpus creation is a methodological step. The choices made here shape every later result.
+
+```{r}
+# List the packages used in this notebook.
+required_packages <- c("tidyverse", "tidytext", "readtext", "readxl")
+
+# Check which of those packages are not installed yet.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install only the packages that are missing.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load the packages so their functions are available.
+library(tidyverse)
+library(tidytext)
+library(readtext)
+library(readxl)
+```
+
+## What We Mean by Corpus
+
+A corpus is not just a pile of files. For this course, a corpus is a collection of texts assembled for a purpose, with enough structure to support analysis.
+
+Important questions:
+
+- Which texts are included?
+- Which texts are missing?
+- What metadata do we have?
+- What does one row represent: a document, a sentence, or a word?
+- What does the corpus claim to represent?
+
+## Reading One Text File
+
+Start with a single plain text file.
+
+```{r}
+# Print the current working directory.
+# It should be the main project folder containing the samples folder.
+getwd()
+```
+
+```{r}
+# Read one text file as a table.
+# read.delim() treats each line of the file as one row.
+pride <- read.delim(
+  "samples/austen_pride_1813.txt",
+  fileEncoding = "UTF-8",
+  header = FALSE
+) %>%
+  # Rename the automatically created column V1 to a clearer name.
+  rename(text = V1)
+
+# Print the first rows to check the import.
+head(pride)
+```
+
+The file has been imported, but each row is just a line from the original file. We often want sentences instead.
+
+```{r}
+# Read the text file line by line.
+pride_sentences <- readLines("samples/austen_pride_1813.txt", encoding = "UTF-8") %>%
+  # Collapse all lines into one long string.
+  paste(collapse = " ") %>%
+  # Convert the string into a one-column data frame.
+  as.data.frame() %>%
+  # Rename the text column.
+  rename(text = ".") %>%
+  # Remove repeated spaces and tidy whitespace.
+  mutate(text = str_squish(text)) %>%
+  # Split the text column into one sentence per row.
+  unnest_sentences(
+    output = "sentence",
+    input = "text",
+    to_lower = FALSE
+  )
+
+# Print the first sentences.
+head(pride_sentences)
+```
+
+### Your Turn
+
+Try the same process with `samples/melville_moby_1851.txt`.
+
+```{r}
+# Repeat the same workflow with the Melville sample.
+melville_sentences <- readLines("samples/melville_moby_1851.txt", encoding = "UTF-8") %>%
+  # Merge the original file lines into one string.
+  paste(collapse = " ") %>%
+  # Convert the string into a data frame.
+  as.data.frame() %>%
+  # Give the text column a clear name.
+  rename(text = ".") %>%
+  # Remove repeated spaces.
+  mutate(text = str_squish(text)) %>%
+  # Split the text into sentences.
+  unnest_sentences(
+    output = "sentence",
+    input = "text",
+    to_lower = FALSE
+  )
+
+# Check the first sentences.
+head(melville_sentences)
+```
+
+## Reading Multiple Text Files
+
+`readtext()` can import several files at once. The `*.txt` pattern means "all text files in this folder."
+
+```{r}
+# Read all .txt files in the samples folder.
+corpus <- readtext("samples/*.txt", encoding = "UTF-8") %>%
+  # Split every imported text into sentences.
+  unnest_sentences(
+    input = "text",
+    output = "sentence",
+    to_lower = FALSE,
+    drop = TRUE
+  ) %>%
+  # Convert the result to a tibble, tidyverse's data-frame format.
+  as_tibble()
+
+# Inspect the first rows of the sentence-level corpus.
+head(corpus)
+```
+
+Inspect which files were imported.
+
+```{r}
+# Show each unique document ID once.
+# This lets us check exactly which files entered the corpus.
+corpus %>%
+  distinct(doc_id)
+```
+
+The sample folder contains a `pride_nospace.txt` file, which is useful for demonstration but not for the corpus. We remove it.
+
+```{r}
+# Remove rows from the demonstration file that contains "nospace" in its name.
+corpus <- corpus %>%
+  filter(!str_detect(doc_id, "nospace"))
+
+# Check the remaining document IDs after filtering.
+corpus %>%
+  distinct(doc_id)
+```
+
+## Adding Metadata from Filenames
+
+The filenames follow the pattern `author_title_year.txt`. We can turn those pieces into columns.
+
+```{r}
+# Start from the sentence-level corpus.
+corpus <- corpus %>%
+  # Tidy whitespace inside each sentence.
+  mutate(sentence = str_squish(sentence)) %>%
+  # Split the filename into metadata columns.
+  separate(
+    doc_id,
+    into = c("author", "title", "year"),
+    sep = "_",
+    remove = FALSE
+  ) %>%
+  # Remove the .txt extension from the year and convert it to a number.
+  mutate(
+    year = str_remove(year, "\\.txt$"),
+    year = as.numeric(year)
+  )
+
+# Inspect the corpus with the new metadata columns.
+head(corpus)
+```
+
+This step matters. Metadata lets us compare texts by author, year, genre, source, or any other category we have recorded.
+
+## Adding Sentence IDs
+
+A sentence ID preserves order within each text.
+
+```{r}
+# Group by document so sentence numbers restart for each text.
+corpus <- corpus %>%
+  group_by(doc_id) %>%
+  # Add a sentence number based on row order within each document.
+  mutate(sentence_id = row_number()) %>%
+  # Remove the grouping so later operations use the whole data frame.
+  ungroup()
+
+# Check the sentence IDs.
+head(corpus)
+```
+
+## Tokenising the Corpus
+
+Tokenisation splits text into units, usually words.
+
+```{r}
+# Split each sentence into tokens, usually words.
+corpus_token <- corpus %>%
+  unnest_tokens(
+    input = "sentence",
+    output = "token",
+    to_lower = FALSE,
+    drop = FALSE
+  )
+
+# Inspect the first ten token rows.
+head(corpus_token, 10)
+```
+
+Add a token ID to preserve word order inside each sentence.
+
+```{r}
+# Group by document and sentence so token numbers restart in each sentence.
+corpus_token <- corpus_token %>%
+  group_by(doc_id, sentence_id) %>%
+  # Add a token number based on word order within the sentence.
+  mutate(token_id = row_number()) %>%
+  # Remove grouping for later analysis.
+  ungroup()
+
+# Check token order.
+head(corpus_token, 10)
+```
+
+## Reading Spreadsheet Data
+
+Texts and metadata may also arrive in spreadsheets.
+
+```{r}
+# Read an Excel file from the samples folder.
+pride_excel <- read_excel("samples/pride.xlsx")
+
+# Inspect the first rows.
+head(pride_excel)
+```
+
+`readtext()` can also import spreadsheet files from a folder.
+
+```{r}
+# Read all Excel files in the samples folder.
+corpus_source <- readtext("samples/*.xlsx")
+
+# Inspect the imported spreadsheet-based corpus.
+head(corpus_source)
+```
+
+## Checkpoint
+
+By this point we have created:
+
+- a sentence-level corpus
+- a token-level corpus
+- metadata columns from filenames
+- sentence and token IDs
+
+Before moving to analysis, ask:
+
+- Is the corpus suitable for the question?
+- What does it represent?
+- What has been excluded?
+- What metadata would make the analysis stronger?
