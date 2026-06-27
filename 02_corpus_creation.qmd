@@ -71,10 +71,10 @@ pride <- read.delim(
   rename(text = V1)
 
 # Print the first rows to check the import.
-head(pride)
+head(pride$text)
 ```
 
-The file has been imported, but each row is just a line from the original file. We often want sentences instead.
+The file has been imported, but each row is a line/paragraph from the original file (which could contain multiple sentences). We often want sentences instead.
 
 ```{r}
 # Read the text file line by line.
@@ -95,7 +95,7 @@ pride_sentences <- readLines("samples/austen_pride_1813.txt", encoding = "UTF-8"
   )
 
 # Print the first sentences.
-head(pride_sentences)
+head(pride_sentences$sentence)
 ```
 
 ### Your Turn
@@ -121,7 +121,7 @@ melville_sentences <- readLines("samples/melville_moby_1851.txt", encoding = "UT
   )
 
 # Check the first sentences.
-head(melville_sentences)
+head(melville_sentences$sentence)
 ```
 
 ## Reading Multiple Text Files
