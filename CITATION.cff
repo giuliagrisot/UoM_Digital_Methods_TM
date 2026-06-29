@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use these teaching materials, please cite them as below."
+title: "Text Analysis with R"
+authors:
+  - family-names: "Grisot"
+    given-names: "Giulia"
+year: 2026
+type: educational-material
+url: "https://github.com/giuliagrisot/UoM_Digital_Methods_TM"
+repository-code: "https://github.com/giuliagrisot/UoM_Digital_Methods_TM"
+license: "MIT AND CC-BY-4.0"
+keywords:
+  - text analysis
+  - R
+  - digital methods
+  - text mining
+  - sentiment analysis
+  - word vectors
+abstract: "Teaching materials for the University of Manchester Digital Methods Summer School course Text Analysis with R."

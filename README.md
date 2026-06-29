@@ -46,6 +46,11 @@ Open the `.qmd` files in RStudio or Posit Cloud and run the code chunks in
 order. Rendering the notebooks is optional; during the workshop, the main aim is
 to execute, inspect, and adapt the code step by step.
 
+## Citation
+
+If you use or adapt these materials, please cite the repository. GitHub should
+display citation information from `CITATION.cff`.
+
 ## Course Sequence
 
 - `01_intro.qmd`: R basics, data structures, reading and writing text files.
@@ -94,3 +99,14 @@ important patterns through concordances and close reading.
 
 `basic_R_scripts/06_space.R` and `basic_R_scripts/09_word_contexts.R` are older
 exploratory extension scripts.
+
+## License
+
+Code in this repository is licensed under the MIT License. See `LICENSE`.
+
+Teaching materials, including prose, slides, notebook explanations, and
+exercises, are licensed under the Creative Commons Attribution 4.0 International
+License (CC BY 4.0). See `LICENSE-CONTENT.md`.
+
+Corpus data, third-party libraries, fonts, and external materials remain subject
+to their original licenses and terms.
