@@ -128,3 +128,73 @@ theme_neighbours %>%
 #
 # Replace the theme terms above and re-run the nearest_words() and theme-axis
 # sections. Then inspect a few examples in context using KWIC in 03_corpus_analysis.R.
+
+
+# GUIDED EXERCISES ---------------------------------------------------------
+
+# Exercise 1: build one thematic neighbourhood.
+
+my_theme <- c("power", "king", "lord", "master")
+number_of_words <- 20
+
+my_theme_neighbours <- nearest_words(
+  target_terms = my_theme,
+  word_vectors = word_vectors,
+  n = number_of_words
+)
+
+my_theme_neighbours
+
+my_theme_neighbours %>%
+  mutate(word = reorder(word, similarity)) %>%
+  ggplot(aes(x = similarity, y = word)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = paste("Words near:", paste(my_theme, collapse = ", ")),
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+
+
+# Exercise 2: compare two thematic neighbourhoods.
+
+theme_one <- c("joy", "happy", "pleasure")
+theme_two <- c("grief", "sad", "sorrow")
+
+two_theme_neighbours <- bind_rows(
+  nearest_words(theme_one, word_vectors, n = 12) %>%
+    mutate(theme = "theme one"),
+  nearest_words(theme_two, word_vectors, n = 12) %>%
+    mutate(theme = "theme two")
+)
+
+two_theme_neighbours
+
+two_theme_neighbours %>%
+  group_by(theme) %>%
+  mutate(word = reorder_within(word, similarity, theme)) %>%
+  ungroup() %>%
+  ggplot(aes(x = similarity, y = word, fill = theme)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ theme, scales = "free_y") +
+  scale_y_reordered() +
+  labs(
+    title = "Comparing two thematic neighbourhoods",
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+
+
+# Exercise 3: check whether your seed words are in the model.
+
+candidate_terms <- c("city", "village", "empire", "freedom")
+
+tibble(term = candidate_terms) %>%
+  mutate(in_model = term %in% rownames(word_vectors))
+
+corpus_for_vectors %>%
+  unnest_tokens(output = "word", input = "text") %>%
+  filter(word %in% candidate_terms) %>%
+  count(word, sort = TRUE)

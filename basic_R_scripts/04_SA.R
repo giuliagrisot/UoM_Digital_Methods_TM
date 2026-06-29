@@ -301,3 +301,69 @@ sentimentr_sent_values %>%
         # axis.text.x = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1)) +
   coord_flip()
+
+
+# GUIDED EXERCISES ---------------------------------------------------------
+
+# Exercise 1: compare lexicons on your own sentence.
+
+my_sentence <- "I was happy, but the ending made me uneasy."
+
+tibble(
+  method = c("syuzhet", "bing", "nrc", "afinn"),
+  sentiment = c(
+    get_sentiment(my_sentence, method = "syuzhet"),
+    get_sentiment(my_sentence, method = "bing"),
+    get_sentiment(my_sentence, method = "nrc"),
+    get_sentiment(my_sentence, method = "afinn")
+  )
+)
+
+
+# Exercise 2: focus on one author.
+
+target_author <- "Woolf"
+
+author_sentiment <- corpus_sentiment_words %>%
+  filter(str_detect(author, target_author)) %>%
+  group_by(author, title, year) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+author_sentiment
+
+author_sentiment %>%
+  ggplot(aes(x = year, y = sentiment_value, label = title)) +
+  geom_point(size = 3, colour = "steelblue") +
+  geom_text(vjust = -0.8, size = 3) +
+  labs(
+    title = paste("Average sentiment for", target_author),
+    x = "Year",
+    y = "Average sentiment value"
+  )
+
+
+# Exercise 3: compare two documents.
+
+doc_a <- "ENG18471_Bronte"
+doc_b <- "ENG19192_Woolf"
+
+two_docs_sentiment <- sentimentr_sent_values %>%
+  filter(doc_id %in% c(doc_a, doc_b)) %>%
+  left_join(
+    corpus_sentence %>%
+      distinct(doc_id, author, title),
+    by = "doc_id"
+  )
+
+head(two_docs_sentiment)
+
+two_docs_sentiment %>%
+  ggplot(aes(x = sentence_id, y = sentiment_value, colour = title)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Comparing sentence-level sentiment in two documents",
+    x = "Sentence ID",
+    y = "sentimentr value",
+    colour = "Title"
+  )

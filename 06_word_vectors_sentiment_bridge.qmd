@@ -1,0 +1,444 @@
+---
+title: "06. Bridge Exercise: From Thematic Neighbourhoods to Sentiment"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+This optional exercise connects two methods from the course:
+
+1. use word vectors to build a thematic representation
+2. find the words from that representation back in the corpus
+3. analyse the sentiment of the sentences where those words appear
+
+The goal is not to prove that a theme has one sentiment. The goal is to move from model output back to textual evidence.
+
+```{r}
+# List the packages used in this bridge exercise.
+required_packages <- c("tidyverse", "text2vec", "tidytext")
+
+# Check which packages are missing from this R installation.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install only packages that are missing.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load packages for data manipulation, tokenisation, word vectors, and plotting.
+library(tidyverse)
+library(text2vec)
+library(tidytext)
+```
+
+## Load the Prepared Data
+
+We use three prepared objects:
+
+- `corpus_docs`: full texts, used to train a small word-vector model
+- `corpus_sentence`: sentence-level corpus, used to find sentences containing theme words
+- `sentimentr_sent_values`: precomputed sentence-level sentiment scores
+
+```{r}
+# Load the document-level corpus used for word-vector training.
+load("corpus_docs.RData")
+
+# Load the sentence-level corpus used for retrieving examples.
+load("corpus_sentence.RData")
+
+# Load precomputed sentence sentiment values to avoid slow processing in class.
+load("sentimentr_sent_values.RData")
+```
+
+```{r}
+# Check the columns available in each object.
+glimpse(corpus_docs)
+glimpse(corpus_sentence)
+glimpse(sentimentr_sent_values)
+```
+
+## Choose Your Theme
+
+Fill in a small set of seed words for a theme you want to explore. Choose words that are likely to appear in the corpus.
+
+```{r}
+# Ready to fill: replace these seed words with a theme for your own research.
+theme_seed_terms <- c("power", "king", "law", "rule")
+
+# Ready to fill: give the theme a readable label for tables and plots.
+theme_label <- "power and authority"
+
+# Ready to fill: choose how many neighbouring words to keep.
+n_neighbours <- 15
+```
+
+## Train a Small Word-Vector Model
+
+This repeats the efficient workflow from the word-vector notebook. The sample size and model settings are modest so the exercise remains usable on Posit Cloud.
+
+```{r}
+# Choose how many documents to use for training.
+# Reduce this number if Posit Cloud is slow.
+n_documents <- 100
+
+# Set a seed so the model is more reproducible.
+set.seed(123)
+
+# Prepare texts for modelling.
+corpus_for_vectors <- corpus_docs %>%
+  # Sort documents so the selected sample is stable.
+  arrange(year, doc_id) %>%
+  # Keep the first n_documents documents.
+  slice_head(n = n_documents) %>%
+  # Lowercase the text so differently capitalised words are treated alike.
+  mutate(text = str_to_lower(text))
+```
+
+```{r}
+# Split each document into word tokens.
+tokens <- word_tokenizer(corpus_for_vectors$text)
+
+# Create a text2vec iterator, which streams tokenised texts into later steps.
+it <- itoken(
+  tokens,
+  ids = corpus_for_vectors$doc_id,
+  progressbar = FALSE
+)
+```
+
+```{r}
+# Build a vocabulary and remove rare terms.
+vocab <- create_vocabulary(it, stopwords = tidytext::stop_words$word) %>%
+  # Keep terms that occur at least 20 times.
+  prune_vocabulary(term_count_min = 20)
+
+# Convert the vocabulary into a vectorizer for the matrix step.
+vectorizer <- vocab_vectorizer(vocab)
+```
+
+```{r}
+# Build a term co-occurrence matrix.
+# The window size controls how far around each word the model looks for context.
+tcm <- create_tcm(it, vectorizer, skip_grams_window = 5)
+```
+
+```{r}
+# Train a small GloVe model.
+glove <- GlobalVectors$new(rank = 50, x_max = 10)
+
+# Fit the main word vectors.
+main_vectors <- glove$fit_transform(tcm, n_iter = 8, convergence_tol = 0.01)
+
+# Extract context vectors from the fitted model.
+context_vectors <- glove$components
+
+# Combine main and context vectors into the final word-vector matrix.
+word_vectors <- main_vectors + t(context_vectors)
+```
+
+## Find a Thematic Neighbourhood
+
+The helper function below finds words whose vectors are close to your seed terms.
+
+```{r}
+# Define a helper function for finding nearest words to one or more seed terms.
+nearest_words <- function(target_terms, word_vectors, n = 20) {
+  # Keep only seed terms that are present in the model vocabulary.
+  available_terms <- intersect(target_terms, rownames(word_vectors))
+
+  # Stop with a clear message if none of the seed terms are available.
+  if (length(available_terms) == 0) {
+    stop("None of the target terms are in the vocabulary. Try more common words.")
+  }
+
+  # Average the vectors for all available seed terms.
+  target_vector <- colMeans(word_vectors[available_terms, , drop = FALSE])
+
+  # Calculate cosine similarity between the theme vector and every word vector.
+  similarities <- sim2(
+    x = word_vectors,
+    y = matrix(target_vector, nrow = 1),
+    method = "cosine",
+    norm = "l2"
+  )[, 1]
+
+  # Return the nearest words as a tidy table.
+  tibble(
+    word = names(similarities),
+    similarity = as.numeric(similarities)
+  ) %>%
+    # Remove the original seed terms from the output.
+    filter(!word %in% available_terms) %>%
+    # Put the closest words first.
+    arrange(desc(similarity)) %>%
+    # Keep only the requested number of words.
+    slice_head(n = n)
+}
+```
+
+```{r}
+# Check which seed terms are available in the model.
+tibble(term = theme_seed_terms) %>%
+  mutate(in_model = term %in% rownames(word_vectors))
+```
+
+```{r}
+# Find words close to the seed terms.
+theme_neighbours <- nearest_words(
+  target_terms = theme_seed_terms,
+  word_vectors = word_vectors,
+  n = n_neighbours
+)
+
+# Inspect the thematic neighbourhood.
+theme_neighbours
+```
+
+```{r}
+# Plot the nearest words for the chosen theme.
+theme_neighbours %>%
+  mutate(word = fct_reorder(word, similarity)) %>%
+  ggplot(aes(x = similarity, y = word)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = paste("Words near", theme_label),
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+## Find the Theme Back in the Corpus
+
+Now we turn the model output into a search vocabulary. We combine the original seed terms with the nearest words and use them to retrieve sentences.
+
+```{r}
+# Combine the original seed words and the nearest words.
+terms_to_trace <- c(theme_seed_terms, theme_neighbours$word) %>%
+  # Keep each term only once.
+  unique()
+
+# Inspect the terms that will be searched in the corpus.
+terms_to_trace
+```
+
+Some vector neighbours may be too general for the research question. This is not a problem to hide: it is part of interpretation. We can remove words that would retrieve too many irrelevant sentences.
+
+```{r}
+# Ready to fill: remove words that are too broad for your theme.
+terms_to_remove <- c("lived", "true", "meet")
+
+# Keep only the terms we want to trace back into the corpus.
+terms_to_trace <- setdiff(terms_to_trace, terms_to_remove)
+
+# Inspect the refined search vocabulary.
+terms_to_trace
+```
+
+```{r}
+# Build a regular expression that searches for any selected theme term.
+# The word boundaries help avoid partial matches such as "law" inside "lawyer".
+theme_pattern <- paste0("\\b(", str_c(terms_to_trace, collapse = "|"), ")\\b")
+```
+
+```{r}
+# Retrieve sentences that contain at least one theme term.
+theme_sentences <- corpus_sentence %>%
+  # Create a lowercase copy of each sentence for matching.
+  mutate(sentence_lower = str_to_lower(sentence)) %>%
+  # Keep sentences where the theme pattern appears.
+  filter(str_detect(sentence_lower, theme_pattern)) %>%
+  # Extract the matched theme words from each sentence.
+  mutate(matched_terms = str_extract_all(sentence_lower, theme_pattern)) %>%
+  # Count how many theme terms appear in the sentence.
+  mutate(n_matched_terms = lengths(matched_terms)) %>%
+  # Turn the matched terms into a readable comma-separated string.
+  mutate(matched_terms = map_chr(matched_terms, ~ str_c(unique(.x), collapse = ", "))) %>%
+  # Remove the helper lowercase column.
+  select(-sentence_lower)
+
+# Inspect the first retrieved sentences.
+theme_sentences %>%
+  select(doc_id, title, author, year, sentence_id, matched_terms, sentence) %>%
+  head(10)
+```
+
+```{r}
+# Count how often each traced term appears in the retrieved sentences.
+theme_term_counts <- theme_sentences %>%
+  # Split the comma-separated matched terms back into one term per row.
+  separate_rows(matched_terms, sep = ", ") %>%
+  # Count term occurrences.
+  count(matched_terms, sort = TRUE)
+
+# Inspect the most common matched terms.
+theme_term_counts
+```
+
+## Add Sentence Sentiment
+
+We now join the retrieved sentences to the precomputed sentiment scores. This is faster than recalculating sentiment during the exercise.
+
+```{r}
+# Collapse the sentiment table to one row per document sentence.
+# This avoids duplicated retrieved sentences if sentimentr produced more than one row.
+sentence_sentiment_values <- sentimentr_sent_values %>%
+  group_by(doc_id, sentence_id) %>%
+  summarise(
+    sentiment_value = mean(sentiment_value, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# Join the retrieved sentences to the precomputed sentiment values.
+theme_sentence_sentiment <- theme_sentences %>%
+  left_join(
+    sentence_sentiment_values,
+    by = c("doc_id", "sentence_id")
+  )
+
+# Inspect the retrieved sentences with sentiment values.
+theme_sentence_sentiment %>%
+  select(doc_id, title, author, year, sentence_id, matched_terms, sentiment_value, sentence) %>%
+  head(10)
+```
+
+```{r}
+# Summarise the sentiment of theme sentences by document.
+theme_sentiment_by_document <- theme_sentence_sentiment %>%
+  group_by(doc_id, title, author, year) %>%
+  summarise(
+    n_sentences = n(),
+    average_sentiment = mean(sentiment_value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_sentences))
+
+# Inspect the document-level summary.
+theme_sentiment_by_document
+```
+
+```{r}
+# Plot average sentiment for documents with enough retrieved sentences.
+theme_sentiment_by_document %>%
+  # Keep documents where the theme appears in at least five sentences.
+  filter(n_sentences >= 5) %>%
+  # Keep the 20 documents with most retrieved sentences.
+  slice_max(n_sentences, n = 20) %>%
+  # Order titles by average sentiment for the plot.
+  mutate(title = fct_reorder(title, average_sentiment)) %>%
+  ggplot(aes(x = average_sentiment, y = title, size = n_sentences)) +
+  geom_point(alpha = 0.7) +
+  labs(
+    title = paste("Sentiment of sentences about", theme_label),
+    x = "Average sentence sentiment",
+    y = NULL,
+    size = "Sentences"
+  ) +
+  theme_minimal()
+```
+
+## Return to Sentences
+
+The plot is only a guide. The next step is to inspect actual sentences, especially the strongest positive and negative examples.
+
+```{r}
+# Ready to fill: choose how many example sentences to inspect.
+n_examples <- 8
+
+# Inspect the most negative retrieved sentences.
+theme_sentence_sentiment %>%
+  arrange(sentiment_value) %>%
+  select(title, author, year, matched_terms, sentiment_value, sentence) %>%
+  slice_head(n = n_examples)
+```
+
+```{r}
+# Inspect the most positive retrieved sentences.
+theme_sentence_sentiment %>%
+  arrange(desc(sentiment_value)) %>%
+  select(title, author, year, matched_terms, sentiment_value, sentence) %>%
+  slice_head(n = n_examples)
+```
+
+## Guided Exercises
+
+### Exercise 1: Change the Theme
+
+```{r}
+# Ready to fill: choose a new theme and rerun the notebook from "Choose Your Theme".
+theme_seed_terms <- c("city", "street", "house", "room")
+theme_label <- "space and place"
+```
+
+Questions to ask:
+
+- Which words does the model add to your initial theme?
+- Are those additions useful, surprising, or misleading?
+- Which words would you remove before searching the corpus?
+
+### Exercise 2: Compare Two Theme Vocabularies
+
+```{r}
+# Ready to fill: choose two themes to compare.
+theme_a_terms <- c("city", "street", "house")
+theme_b_terms <- c("country", "field", "garden")
+
+# Find neighbours for both themes.
+theme_comparison <- bind_rows(
+  nearest_words(theme_a_terms, word_vectors, n = 10) %>%
+    mutate(theme = "theme A"),
+  nearest_words(theme_b_terms, word_vectors, n = 10) %>%
+    mutate(theme = "theme B")
+)
+
+# Inspect both neighbourhoods.
+theme_comparison
+```
+
+Questions to ask:
+
+- Do the two themes retrieve different kinds of words?
+- Would both themes be suitable for sentence-level sentiment analysis?
+- What would count as meaningful evidence for your research question?
+
+### Exercise 3: Interpret the Limits
+
+```{r}
+# Count how many retrieved sentences have neutral, negative, or positive sentiment.
+theme_sentence_sentiment %>%
+  mutate(
+    sentiment_group = case_when(
+      sentiment_value > 0 ~ "positive",
+      sentiment_value < 0 ~ "negative",
+      TRUE ~ "neutral"
+    )
+  ) %>%
+  count(sentiment_group)
+```
+
+Questions to ask:
+
+- Are there enough sentences to interpret the pattern?
+- Are the theme words central to the sentence, or only incidental?
+- Does the sentiment describe the theme, a character, an event, or the narrator's phrasing?
+
+## Takeaway
+
+This workflow joins three levels of analysis:
+
+- word vectors suggest a thematic vocabulary
+- corpus retrieval shows where that vocabulary appears
+- sentence sentiment gives a broad affective pattern to investigate
+
+The strongest interpretations come from moving between the table, the plot, and the sentences themselves.

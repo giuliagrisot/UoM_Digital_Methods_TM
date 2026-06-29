@@ -14,15 +14,17 @@ execute:
 
 ## Aim
 
-This notebook shows how texts become a corpus that can be analysed in R. We import files, add metadata from filenames, split texts into sentences and tokens, and inspect the resulting data.
+This notebook shows how texts become a corpus that can be analysed in R.
+
+To keep the workflow simple, we use **one import strategy only**: the `readtext` package. We use it first for one text file, then for a folder of text files. Later scripts build on the same kind of corpus object.
 
 Corpus creation is a methodological step. The choices made here shape every later result.
 
 ```{r}
 # List the packages used in this notebook.
-required_packages <- c("tidyverse", "tidytext", "readtext", "readxl")
+required_packages <- c("tidyverse", "tidytext", "readtext")
 
-# Check which of those packages are not installed yet.
+# Check which packages are not installed yet.
 missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
 
 # Install only the packages that are missing.
@@ -34,7 +36,6 @@ if (length(missing_packages) > 0) {
 library(tidyverse)
 library(tidytext)
 library(readtext)
-library(readxl)
 ```
 
 ## What We Mean by Corpus
@@ -49,9 +50,9 @@ Important questions:
 - What does one row represent: a document, a sentence, or a word?
 - What does the corpus claim to represent?
 
-## Reading One Text File
+## Check the Project Folder
 
-Start with a single plain text file.
+Before reading files, check that R is working from the project folder.
 
 ```{r}
 # Print the current working directory.
@@ -59,40 +60,34 @@ Start with a single plain text file.
 getwd()
 ```
 
-```{r}
-# Read one text file as a table.
-# read.delim() treats each line of the file as one row.
-pride <- read.delim(
-  "samples/austen_pride_1813.txt",
-  fileEncoding = "UTF-8",
-  header = FALSE
-) %>%
-  # Rename the automatically created column V1 to a clearer name.
-  rename(text = V1)
+## Read One Text File with `readtext`
 
-# Print the first rows to check the import.
-head(pride$text)
+Start with one plain text file.
+
+```{r}
+# Read one text file with readtext().
+# The result has one row per file and includes a doc_id column.
+pride <- readtext("samples/austen_pride_1813.txt", encoding = "UTF-8")
+
+# Inspect the imported document.
+pride
 ```
 
-The file has been imported, but each row is a line/paragraph from the original file (which could contain multiple sentences). We often want sentences instead.
+`readtext()` gives us a document-level object: one row for the file, with the full text in a `text` column.
+
+To analyse the text, we often want smaller units, such as sentences.
 
 ```{r}
-# Read the text file line by line.
-pride_sentences <- readLines("samples/austen_pride_1813.txt", encoding = "UTF-8") %>%
-  # Collapse all lines into one long string.
-  paste(collapse = " ") %>%
-  # Convert the string into a one-column data frame.
-  as.data.frame() %>%
-  # Rename the text column.
-  rename(text = ".") %>%
-  # Remove repeated spaces and tidy whitespace.
-  mutate(text = str_squish(text)) %>%
+# Start from the document-level object.
+pride_sentences <- pride %>%
   # Split the text column into one sentence per row.
   unnest_sentences(
     output = "sentence",
     input = "text",
     to_lower = FALSE
-  )
+  ) %>%
+  # Remove repeated spaces inside sentences.
+  mutate(sentence = str_squish(sentence))
 
 # Print the first sentences.
 head(pride_sentences$sentence)
@@ -100,49 +95,38 @@ head(pride_sentences$sentence)
 
 ### Your Turn
 
-Try the same process with `samples/melville_moby_1851.txt`.
+Use the same `readtext()` workflow for `samples/melville_moby_1851.txt`.
 
 ```{r}
-# Repeat the same workflow with the Melville sample.
-melville_sentences <- readLines("samples/melville_moby_1851.txt", encoding = "UTF-8") %>%
-  # Merge the original file lines into one string.
-  paste(collapse = " ") %>%
-  # Convert the string into a data frame.
-  as.data.frame() %>%
-  # Give the text column a clear name.
-  rename(text = ".") %>%
-  # Remove repeated spaces.
-  mutate(text = str_squish(text)) %>%
-  # Split the text into sentences.
+# Read one Melville sample file with readtext().
+melville <- readtext("samples/melville_moby_1851.txt", encoding = "UTF-8")
+
+# Split the Melville text into sentences.
+melville_sentences <- melville %>%
   unnest_sentences(
     output = "sentence",
     input = "text",
     to_lower = FALSE
-  )
+  ) %>%
+  mutate(sentence = str_squish(sentence))
 
 # Check the first sentences.
 head(melville_sentences$sentence)
 ```
 
-## Reading Multiple Text Files
+## Read Multiple Text Files with `readtext`
 
-`readtext()` can import several files at once. The `*.txt` pattern means "all text files in this folder."
+The same package can read many files at once. The pattern `samples/*.txt` means "all `.txt` files in the samples folder."
 
 ```{r}
 # Read all .txt files in the samples folder.
-corpus <- readtext("samples/*.txt", encoding = "UTF-8") %>%
-  # Split every imported text into sentences.
-  unnest_sentences(
-    input = "text",
-    output = "sentence",
-    to_lower = FALSE,
-    drop = TRUE
-  ) %>%
-  # Convert the result to a tibble, tidyverse's data-frame format.
+# Each file becomes one row.
+corpus_docs_small <- readtext("samples/*.txt", encoding = "UTF-8") %>%
+  # Convert to a tibble for tidyverse workflows.
   as_tibble()
 
-# Inspect the first rows of the sentence-level corpus.
-head(corpus)
+# Inspect the document-level corpus.
+head(corpus_docs_small)
 ```
 
 Inspect which files were imported.
@@ -150,31 +134,30 @@ Inspect which files were imported.
 ```{r}
 # Show each unique document ID once.
 # This lets us check exactly which files entered the corpus.
-corpus %>%
+corpus_docs_small %>%
   distinct(doc_id)
 ```
 
-The sample folder contains a `pride_nospace.txt` file, which is useful for demonstration but not for the corpus. We remove it.
+The sample folder contains a `pride_nospace.txt` file, which is useful for demonstration but not for the corpus. Also the `Cat.txt` document we created as a test is unnecessary here. We remove them.
 
 ```{r}
 # Remove rows from the demonstration file that contains "nospace" in its name.
-corpus <- corpus %>%
-  filter(!str_detect(doc_id, "nospace"))
+corpus_docs_small <- corpus_docs_small %>%
+  filter(!str_detect(doc_id, "nospace")) %>%
+  filter(!str_detect(doc_id, "Cat"))
 
 # Check the remaining document IDs after filtering.
-corpus %>%
+corpus_docs_small %>%
   distinct(doc_id)
 ```
 
-## Adding Metadata from Filenames
+## Add Metadata from Filenames
 
 The filenames follow the pattern `author_title_year.txt`. We can turn those pieces into columns.
 
 ```{r}
-# Start from the sentence-level corpus.
-corpus <- corpus %>%
-  # Tidy whitespace inside each sentence.
-  mutate(sentence = str_squish(sentence)) %>%
+# Start from the document-level corpus.
+corpus_docs_small <- corpus_docs_small %>%
   # Split the filename into metadata columns.
   separate(
     doc_id,
@@ -182,42 +165,141 @@ corpus <- corpus %>%
     sep = "_",
     remove = FALSE
   ) %>%
-  # Remove the .txt extension from the year and convert it to a number.
+  # Remove the .txt extension from year and convert it to a number.
   mutate(
     year = str_remove(year, "\\.txt$"),
     year = as.numeric(year)
   )
 
-# Inspect the corpus with the new metadata columns.
-head(corpus)
+# Inspect the document-level corpus with metadata.
+corpus_docs_small %>%
+  select(doc_id, author, title, year) %>%
+  head()
 ```
 
 This step matters. Metadata lets us compare texts by author, year, genre, source, or any other category we have recorded.
 
-## Adding Sentence IDs
+## Create a Sentence-Level Corpus
 
-A sentence ID preserves order within each text.
+Now we split every document into sentences.
 
 ```{r}
-# Group by document so sentence numbers restart for each text.
-corpus <- corpus %>%
+# Start from the document-level corpus.
+corpus_sentence_small <- corpus_docs_small %>%
+  # Split each document's text into one sentence per row.
+  unnest_sentences(
+    input = "text",
+    output = "sentence",
+    to_lower = FALSE,
+    drop = TRUE
+  ) %>%
+  # Remove repeated spaces inside sentences.
+  mutate(sentence = str_squish(sentence)) %>%
+  # Group by document so sentence numbers restart for each text.
   group_by(doc_id) %>%
   # Add a sentence number based on row order within each document.
   mutate(sentence_id = row_number()) %>%
   # Remove the grouping so later operations use the whole data frame.
   ungroup()
 
-# Check the sentence IDs.
-head(corpus)
+# Inspect the sentence-level corpus.
+head(corpus_sentence_small)
 ```
 
-## Tokenising the Corpus
+## Check back for errors
+
+Sentence splitting is never completely neutral. A common problem is that abbreviations such as `Mr.`, `Mrs.`, or `Dr.` contain a full stop, so R may treat them as complete sentences.
+
+First, let us check whether this happened.
+
+```{r}
+# Look for very short sentences that are probably abbreviations.
+# The pattern means: start of sentence, one common title, full stop, end of sentence.
+corpus_sentence_small %>%
+  filter(str_detect(sentence, "^(Mr|Mrs|Ms|Miss|Dr|Prof|Rev|Hon|Capt|Col|Gen|Sgt|Jr|Sr|St|Mme|Mlle)\\.$")) %>%
+  count(sentence, sort = TRUE)
+```
+
+It is also useful to inspect very short sentences more generally. Some will be real sentences, but others may reveal sentence-splitting errors.
+
+```{r}
+# Count sentences with one or two visible word-like units.
+# This is a quick diagnostic, not a perfect error detector.
+corpus_sentence_small %>%
+  filter(str_count(sentence, "\\S+") <= 2) %>%
+  count(sentence, sort = TRUE) %>%
+  head(20)
+```
+
+One pragmatic fix is to temporarily protect the full stops in common titles before sentence splitting. After splitting, we put the full stops back.
+
+This is a partial solution: it handles common abbreviations, but it will not solve every possible sentence-splitting problem. It may also make the wrong decision in rare cases where an abbreviation genuinely appears at the end of a sentence. The important thing is that we have noticed the issue, made a decision, and can explain what we changed.
+
+```{r}
+# Define a helper function to protect full stops in common title abbreviations.
+# For example, "Mr." becomes "Mr<ABBR_DOT>" before sentence splitting.
+protect_title_dots <- function(text) {
+  str_replace_all(
+    text,
+    "\\b(Mr|Mrs|Ms|Miss|Dr|Prof|Rev|Hon|Capt|Col|Gen|Sgt|Jr|Sr|St|Mme|Mlle)\\.",
+    "\\1<ABBR_DOT>"
+  )
+}
+
+# Define a second helper function to restore the protected full stops.
+# For example, "Mr<ABBR_DOT>" becomes "Mr." again.
+restore_title_dots <- function(text) {
+  str_replace_all(text, "<ABBR_DOT>", ".")
+}
+```
+
+Now we recreate the sentence-level corpus with this small preprocessing step.
+
+```{r}
+# Start again from the document-level corpus.
+corpus_sentence_small <- corpus_docs_small %>%
+  # Protect dots in common title abbreviations before splitting sentences.
+  mutate(text = protect_title_dots(text)) %>%
+  # Split each document's text into one sentence per row.
+  unnest_sentences(
+    input = "text",
+    output = "sentence",
+    to_lower = FALSE,
+    drop = TRUE
+  ) %>%
+  # Restore the dots in abbreviations after sentence splitting.
+  mutate(sentence = restore_title_dots(sentence)) %>%
+  # Remove repeated spaces inside sentences.
+  mutate(sentence = str_squish(sentence)) %>%
+  # Group by document so sentence numbers restart for each text.
+  group_by(doc_id) %>%
+  # Recreate sentence IDs after fixing the sentence split.
+  mutate(sentence_id = row_number()) %>%
+  # Remove grouping for later analysis.
+  ungroup()
+
+# Inspect the first rows of the corrected sentence-level corpus.
+head(corpus_sentence_small)
+```
+
+Check whether the abbreviation-only sentences are still present.
+
+```{r}
+# Run the same diagnostic again after the fix.
+corpus_sentence_small %>%
+  filter(str_detect(sentence, "^(Mr|Mrs|Ms|Miss|Dr|Prof|Rev|Hon|Capt|Col|Gen|Sgt|Jr|Sr|St|Mme|Mlle)\\.$")) %>%
+  count(sentence, sort = TRUE)
+```
+
+
+## Create a Token-Level Corpus
 
 Tokenisation splits text into units, usually words.
 
 ```{r}
-# Split each sentence into tokens, usually words.
-corpus_token <- corpus %>%
+# Start from the sentence-level corpus.
+corpus_token_small <- corpus_sentence_small %>%
+  # Split each sentence into tokens.
   unnest_tokens(
     input = "sentence",
     output = "token",
@@ -226,14 +308,14 @@ corpus_token <- corpus %>%
   )
 
 # Inspect the first ten token rows.
-head(corpus_token, 10)
+head(corpus_token_small, 10)
 ```
 
 Add a token ID to preserve word order inside each sentence.
 
 ```{r}
 # Group by document and sentence so token numbers restart in each sentence.
-corpus_token <- corpus_token %>%
+corpus_token_small <- corpus_token_small %>%
   group_by(doc_id, sentence_id) %>%
   # Add a token number based on word order within the sentence.
   mutate(token_id = row_number()) %>%
@@ -241,35 +323,14 @@ corpus_token <- corpus_token %>%
   ungroup()
 
 # Check token order.
-head(corpus_token, 10)
-```
-
-## Reading Spreadsheet Data
-
-Texts and metadata may also arrive in spreadsheets.
-
-```{r}
-# Read an Excel file from the samples folder.
-pride_excel <- read_excel("samples/pride.xlsx")
-
-# Inspect the first rows.
-head(pride_excel)
-```
-
-`readtext()` can also import spreadsheet files from a folder.
-
-```{r}
-# Read all Excel files in the samples folder.
-corpus_source <- readtext("samples/*.xlsx")
-
-# Inspect the imported spreadsheet-based corpus.
-head(corpus_source)
+head(corpus_token_small, 10)
 ```
 
 ## Checkpoint
 
 By this point we have created:
 
+- a document-level corpus
 - a sentence-level corpus
 - a token-level corpus
 - metadata columns from filenames

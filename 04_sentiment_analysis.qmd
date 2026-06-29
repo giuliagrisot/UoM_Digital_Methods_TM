@@ -280,6 +280,33 @@ test_sentence %>%
 
 Find the most negative sentence in `sentence_sentiment`, then inspect its words.
 
+```{r}
+# Guided exercise 1: choose a sentence from the sentiment table.
+# Change slice_tail(n = 1) to slice_head(n = 1) if you want the most positive sentence.
+chosen_sentence <- sentence_sentiment %>%
+  slice_tail(n = 1)
+
+# Print the document ID and sentence ID we will inspect.
+chosen_sentence
+```
+
+```{r}
+# Guided exercise 1 continued: inspect the words in the chosen sentence.
+chosen_sentence_words <- corpus_token_sample %>%
+  # Keep only the document selected above.
+  filter(doc_id == chosen_sentence$doc_id[1]) %>%
+  # Keep only the sentence selected above.
+  filter(sentence_id == chosen_sentence$sentence_id[1]) %>%
+  # Lowercase tokens so they match the sentiment lexicon.
+  mutate(word = tolower(token)) %>%
+  # Add sentiment values from the lexicon.
+  left_join(syuzhet_en, by = "word", relationship = "many-to-many")
+
+# Show the tokens and their sentiment values.
+chosen_sentence_words %>%
+  select(token, value)
+```
+
 ## Sentiment Over Narrative Time
 
 We can also plot sentence-level sentiment across one document.
@@ -369,6 +396,114 @@ sentimentr_sent_values %>%
     y = "Title"
   )
 ```
+
+## Guided Exercises
+
+Use these templates to adapt the analysis. The values in quotation marks are the parts to change first.
+
+### Exercise 1: Compare Lexicons on Your Own Sentence
+
+```{r}
+# Write a sentence you want to test.
+my_sentence <- "I was happy, but the ending made me uneasy."
+
+# Compare several lexicon methods on the same sentence.
+tibble(
+  method = c("syuzhet", "bing", "nrc", "afinn"),
+  sentiment = c(
+    get_sentiment(my_sentence, method = "syuzhet"),
+    get_sentiment(my_sentence, method = "bing"),
+    get_sentiment(my_sentence, method = "nrc"),
+    get_sentiment(my_sentence, method = "afinn")
+  )
+)
+```
+
+Questions to ask:
+
+- Do the methods agree?
+- Which words do you think are driving the result?
+- Does the score match your reading of the sentence?
+
+### Exercise 2: Focus on One Author
+
+```{r}
+# Choose one author pattern to investigate.
+# Try "Woolf", "Dickens", "Bronte", "Eliot", or another name in the corpus.
+target_author <- "Woolf"
+
+# Calculate average sentiment for texts by that author.
+author_sentiment <- corpus_sentiment_words %>%
+  filter(str_detect(author, target_author)) %>%
+  group_by(author, title, year) %>%
+  summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Print the result.
+author_sentiment
+```
+
+```{r}
+# Plot the selected author's texts.
+author_sentiment %>%
+  ggplot(aes(x = year, y = sentiment_value, label = title)) +
+  geom_point(size = 3, colour = "steelblue") +
+  geom_text(vjust = -0.8, size = 3) +
+  labs(
+    title = paste("Average sentiment for", target_author),
+    x = "Year",
+    y = "Average sentiment value"
+  )
+```
+
+Questions to ask:
+
+- Are there differences between texts?
+- Are the differences large enough to interpret?
+- Which text would you inspect more closely?
+
+### Exercise 3: Compare Two Documents
+
+```{r}
+# Choose two document IDs from the corpus.
+# Use distinct(author, title, doc_id) if you need to look them up.
+doc_a <- "ENG18471_Bronte"
+doc_b <- "ENG19192_Woolf"
+
+# Calculate sentence-level sentiment for both documents.
+two_docs_sentiment <- sentimentr_sent_values %>%
+  filter(doc_id %in% c(doc_a, doc_b))
+
+# Add title and author metadata.
+two_docs_sentiment <- two_docs_sentiment %>%
+  left_join(
+    corpus_sentence %>%
+      distinct(doc_id, author, title),
+    by = "doc_id"
+  )
+
+# Inspect the first rows.
+head(two_docs_sentiment)
+```
+
+```{r}
+# Plot sentiment over sentence order for the two selected documents.
+two_docs_sentiment %>%
+  ggplot(aes(x = sentence_id, y = sentiment_value, colour = title)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Comparing sentence-level sentiment in two documents",
+    x = "Sentence ID",
+    y = "sentimentr value",
+    colour = "Title"
+  )
+```
+
+Questions to ask:
+
+- Do the two texts show different sentiment patterns?
+- Where are the peaks and dips?
+- Which passages would you return to for close reading?
 
 ## Takeaway
 

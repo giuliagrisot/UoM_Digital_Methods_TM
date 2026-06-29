@@ -50,5 +50,6 @@ rsconnect/
 
 # Corpus token (too big)
 corpus_token.RData
+Rplots.pdf
 .DS_Store
 *DS_Store/

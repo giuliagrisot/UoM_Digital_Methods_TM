@@ -289,6 +289,123 @@ bind_rows(
 )
 ```
 
+## Guided Exercises
+
+Use these templates to explore your own theme. Replace the values in quotation marks first.
+
+### Exercise 1: Build One Thematic Neighbourhood
+
+```{r}
+# Choose seed words for one theme.
+# Pick words that are likely to appear in the corpus.
+my_theme <- c("power", "king", "lord", "master")
+
+# Choose how many neighbouring words to return.
+number_of_words <- 20
+
+# Find the words nearest to your theme.
+my_theme_neighbours <- nearest_words(
+  target_terms = my_theme,
+  word_vectors = word_vectors,
+  n = number_of_words
+)
+
+# Inspect the result.
+my_theme_neighbours
+```
+
+```{r}
+# Plot the nearest words for your theme.
+my_theme_neighbours %>%
+  mutate(word = reorder(word, similarity)) %>%
+  ggplot(aes(x = similarity, y = word)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = paste("Words near:", paste(my_theme, collapse = ", ")),
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+Questions to ask:
+
+- Which neighbours are expected?
+- Which neighbours are surprising?
+- Do they suggest a social, emotional, spatial, or political pattern?
+- Which words should be checked with KWIC?
+
+### Exercise 2: Compare Two Thematic Neighbourhoods
+
+```{r}
+# Choose two sets of seed words.
+# Replace these with terms relevant to your own research.
+theme_one <- c("joy", "happy", "pleasure")
+theme_two <- c("grief", "sad", "sorrow")
+
+# Find nearest words for both themes and combine them.
+two_theme_neighbours <- bind_rows(
+  nearest_words(theme_one, word_vectors, n = 12) %>%
+    mutate(theme = "theme one"),
+  nearest_words(theme_two, word_vectors, n = 12) %>%
+    mutate(theme = "theme two")
+)
+
+# Inspect the combined table.
+two_theme_neighbours
+```
+
+```{r}
+# Plot both themes side by side.
+two_theme_neighbours %>%
+  group_by(theme) %>%
+  mutate(word = reorder_within(word, similarity, theme)) %>%
+  ungroup() %>%
+  ggplot(aes(x = similarity, y = word, fill = theme)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ theme, scales = "free_y") +
+  scale_y_reordered() +
+  labs(
+    title = "Comparing two thematic neighbourhoods",
+    x = "Cosine similarity",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+Questions to ask:
+
+- Do the two themes produce clearly different neighbourhoods?
+- Are any words shared between the two themes?
+- What might the similarities or differences tell us about the corpus?
+
+### Exercise 3: Check Whether Your Seed Words Are in the Model
+
+```{r}
+# Choose seed words you want to check.
+candidate_terms <- c("city", "village", "empire", "freedom")
+
+# Check which words are available in the word-vector model.
+tibble(term = candidate_terms) %>%
+  mutate(in_model = term %in% rownames(word_vectors))
+```
+
+If a word is not in the model, it may be too rare, removed by the vocabulary threshold, or absent from the selected corpus sample.
+
+```{r}
+# Optional: check raw word counts in the model sample.
+corpus_for_vectors %>%
+  unnest_tokens(output = "word", input = "text") %>%
+  filter(word %in% candidate_terms) %>%
+  count(word, sort = TRUE)
+```
+
+Questions to ask:
+
+- Are your seed words common enough?
+- Should you choose broader terms?
+- Would lowering `term_count_min` include more rare words, and what noise might that add?
+
 ## Interpret With Care
 
 Word-vector results depend on:

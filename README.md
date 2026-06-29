@@ -10,6 +10,7 @@ course sequence:
 3. Corpus analysis
 4. Sentiment analysis
 5. Word vectors and thematic neighbourhoods
+6. Optional bridge exercise: word vectors and sentiment
 
 The notebooks and scripts are designed to work in a local RStudio installation
 and in Posit Cloud. For the smoothest setup, open
@@ -26,7 +27,6 @@ install.packages(c(
   "tidyverse",
   "tidytext",
   "readtext",
-  "readxl",
   "syuzhet",
   "quanteda",
   "plotly",
@@ -58,6 +58,8 @@ to execute, inspect, and adapt the code step by step.
 - `05_word_vectors.qmd`: word-vector analysis for exploring thematic
   neighbourhoods and comparing how selected themes are represented in the
   corpus.
+- `06_word_vectors_sentiment_bridge.qmd`: optional guided exercise connecting
+  word vectors, corpus retrieval, and sentence-level sentiment.
 
 The `basic_R_scripts/` folder contains companion runnable `.R` scripts with the
 same core workflow. The `.qmd` files are the most student-facing version because
