@@ -71,13 +71,12 @@ corpus_token_sample %>%
 
 ### Your Turn
 
-Which years are present, and how many unique years are there?
+Which years are present?
 
 ```{r}
 # List the unique years in order.
-corpus_token_sample %>%
-  distinct(year) %>%
-  arrange(year)
+corpus_token_sample$year %>%
+  summary()
 ```
 
 ```{r}
@@ -86,6 +85,17 @@ corpus_token_sample %>%
   distinct(year) %>%
   nrow()
 ```
+
+## We can also visualise this
+
+```{r}
+corpus_token_sample %>%
+  select(doc_id, year) %>%
+  distinct() %>%
+  ggplot(aes(year)) +
+  geom_histogram()
+```
+
 
 ## Sentiment Lexicons
 
@@ -278,34 +288,116 @@ test_sentence %>%
 
 ### Your Turn
 
-Find the most negative sentence in `sentence_sentiment`, then inspect its words.
+In this exercise, you will choose one short sentence with a clear sentiment score, inspect which words produced that score, and then make your own heatmap.
+
+The first chunk creates a beginner-friendly list of candidate sentences. It keeps sentences that:
+
+- are not too long
+- have at least one sentiment word
+- have a strong positive or negative score
 
 ```{r}
-# Guided exercise 1: choose a sentence from the sentiment table.
-# Change slice_tail(n = 1) to slice_head(n = 1) if you want the most positive sentence.
-chosen_sentence <- sentence_sentiment %>%
-  slice_tail(n = 1)
+# Step 1: count how many tokens are in each sentence.
+sentence_lengths <- corpus_token_sample %>%
+  count(doc_id, sentence_id, name = "sentence_length")
 
-# Print the document ID and sentence ID we will inspect.
+# Step 2: create a short list of sentences that are easier to inspect.
+candidate_sentences <- sentence_sentiment %>%
+  # Add the sentence length information.
+  left_join(sentence_lengths, by = c("doc_id", "sentence_id")) %>%
+  # Keep sentences of 35 tokens or fewer so the heatmap is readable.
+  filter(sentence_length <= 35) %>%
+  # Keep only sentences with some sentiment.
+  filter(value != 0) %>%
+  # Make a helper column for the strength of the sentiment score.
+  mutate(abs_value = abs(value)) %>%
+  # Put the strongest sentiment examples first.
+  arrange(desc(abs_value)) %>%
+  # Keep the first ten examples.
+  slice_head(n = 10) %>%
+  # Add a simple row number so we can choose one sentence.
+  mutate(choice_number = row_number()) %>%
+  # Show the most useful columns.
+  select(choice_number, title, author, doc_id, sentence_id, sentence_length, value)
+
+# Print the candidate sentences.
+candidate_sentences
+```
+
+Choose one row from `candidate_sentences`. To choose a different sentence, change the number assigned to `my_choice`.
+
+```{r}
+# Step 3: choose which sentence you want to inspect.
+# Pick a number from the choice_number column above.
+my_choice <- 1
+
+# Keep only the row you chose.
+chosen_sentence <- candidate_sentences %>%
+  filter(choice_number == my_choice)
+
+# Print the sentence information.
 chosen_sentence
 ```
 
 ```{r}
-# Guided exercise 1 continued: inspect the words in the chosen sentence.
+# Step 4: retrieve the actual words from the chosen sentence.
 chosen_sentence_words <- corpus_token_sample %>%
   # Keep only the document selected above.
   filter(doc_id == chosen_sentence$doc_id[1]) %>%
   # Keep only the sentence selected above.
   filter(sentence_id == chosen_sentence$sentence_id[1]) %>%
+  # Keep the words in their original sentence order.
+  arrange(token_id) %>%
   # Lowercase tokens so they match the sentiment lexicon.
   mutate(word = tolower(token)) %>%
   # Add sentiment values from the lexicon.
   left_join(syuzhet_en, by = "word", relationship = "many-to-many")
 
-# Show the tokens and their sentiment values.
+# Print the full sentence first.
+chosen_sentence_words$sentence[1]
+```
+
+```{r}
+# Step 5: show each token and its sentiment value.
+# NA means that the word was not found in the sentiment lexicon.
 chosen_sentence_words %>%
   select(token, value)
 ```
+
+```{r}
+# Step 6: make a heatmap of the chosen sentence.
+chosen_sentence_words %>%
+  mutate(
+    # Break the sentence into lines of ten tokens for plotting.
+    line_number = rep(1:ceiling(n() / 10), each = 10, length.out = n()),
+    # Give each token a position from 1 to 10 within each plotted line.
+    token_position = rep(1:10, length.out = n())
+  ) %>%
+  # Plot token position horizontally and line number vertically.
+  ggplot(aes(x = token_position, y = -line_number, fill = value)) +
+  # Draw one tile behind each token.
+  geom_tile() +
+  # Print the token text on top of each tile.
+  geom_text(aes(label = token), size = 3) +
+  # Use colour to show sentiment value; grey means no sentiment match.
+  scale_fill_viridis_c(na.value = "grey90") +
+  theme_minimal() +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Sentiment Values Within Your Chosen Sentence",
+    subtitle = paste0(chosen_sentence_words$title[1], " by ", chosen_sentence_words$author[1])
+  )
+```
+
+Questions to ask:
+
+- Which words have positive or negative sentiment values?
+- Are any important words missing from the lexicon?
+- Does the heatmap match your own reading of the sentence?
+
 
 ## Sentiment Over Narrative Time
 
@@ -428,13 +520,21 @@ Questions to ask:
 ### Exercise 2: Focus on One Author
 
 ```{r}
-# Choose one author pattern to investigate.
-# Try "Woolf", "Dickens", "Bronte", "Eliot", or another name in the corpus.
-target_author <- "Woolf"
+# Choose one or more author patterns to investigate.
+# Try one name, such as "Woolf", or several names, such as c("Woolf", "Dickens").
+target_author <- c("Woolf", "Dickens", "Trollope")
 
-# Calculate average sentiment for texts by that author.
+# Combine the selected names into one search pattern.
+# For example, c("Woolf", "Dickens") becomes "Woolf|Dickens".
+author_pattern <- str_c(target_author, collapse = "|")
+
+# Create a readable label for plot titles.
+author_label <- str_c(target_author, collapse = ", ")
+
+# Calculate average sentiment for texts by the selected author or authors.
 author_sentiment <- corpus_sentiment_words %>%
-  filter(str_detect(author, target_author)) %>%
+  # Keep rows where the author column contains any selected name.
+  filter(str_detect(author, regex(author_pattern, ignore_case = TRUE))) %>%
   group_by(author, title, year) %>%
   summarise(sentiment_value = mean(value, na.rm = TRUE), .groups = "drop")
 
@@ -443,15 +543,16 @@ author_sentiment
 ```
 
 ```{r}
-# Plot the selected author's texts.
+# Plot the selected author or authors.
 author_sentiment %>%
-  ggplot(aes(x = year, y = sentiment_value, label = title)) +
-  geom_point(size = 3, colour = "steelblue") +
-  geom_text(vjust = -0.8, size = 3) +
+  ggplot(aes(x = year, y = sentiment_value, colour = author, label = title)) +
+  geom_point(size = 3) +
+  geom_text(vjust = -0.8, size = 3, show.legend = FALSE) +
   labs(
-    title = paste("Average sentiment for", target_author),
+    title = paste("Average sentiment for", author_label),
     x = "Year",
-    y = "Average sentiment value"
+    y = "Average sentiment value",
+    colour = "Author"
   )
 ```
 

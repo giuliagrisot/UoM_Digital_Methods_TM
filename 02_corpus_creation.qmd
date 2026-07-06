@@ -95,11 +95,11 @@ head(pride_sentences$sentence)
 
 ### Your Turn
 
-Use the same `readtext()` workflow for `samples/melville_moby_1851.txt`.
+Use the same `readtext()` workflow for `samples/melville_moby_1851.txt`. Replace the 'XXXX" with the correct file path. 
 
 ```{r}
 # Read one Melville sample file with readtext().
-melville <- readtext("samples/melville_moby_1851.txt", encoding = "UTF-8")
+melville <- readtext("XXXXX", encoding = "UTF-8")
 
 # Split the Melville text into sentences.
 melville_sentences <- melville %>%
@@ -127,15 +127,6 @@ corpus_docs_small <- readtext("samples/*.txt", encoding = "UTF-8") %>%
 
 # Inspect the document-level corpus.
 head(corpus_docs_small)
-```
-
-Inspect which files were imported.
-
-```{r}
-# Show each unique document ID once.
-# This lets us check exactly which files entered the corpus.
-corpus_docs_small %>%
-  distinct(doc_id)
 ```
 
 The sample folder contains a `pride_nospace.txt` file, which is useful for demonstration but not for the corpus. Also the `Cat.txt` document we created as a test is unnecessary here. We remove them.
