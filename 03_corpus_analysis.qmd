@@ -1,6 +1,7 @@
 ---
 title: "03. Corpus Analysis"
 subtitle: "Text Analysis with R"
+author: "Dr Giulia Grisot"
 format:
   html:
     toc: true
@@ -11,6 +12,8 @@ execute:
   warning: false
   message: false
 ---
+
+> Author: Dr Giulia Grisot. This script is distributed under the MIT licence.
 
 ## Aim
 
