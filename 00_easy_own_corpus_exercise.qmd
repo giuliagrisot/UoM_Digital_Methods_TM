@@ -1,0 +1,291 @@
+---
+title: "Easy Exercise: Import Your Own Corpus"
+subtitle: "Text Analysis with R"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Aim
+
+In this exercise you will:
+
+- put your own `.txt` files in one folder
+- import them into R
+- split them into sentences
+- split them into word tokens
+- remove stopwords
+
+This is a simple starting workflow. It is designed to work with plain text files.
+
+## Before You Start
+
+Create a folder called `my_corpus` inside this project folder.
+
+Put your own `.txt` files inside it.
+
+Example:
+
+```text
+my_corpus/
+  text_1.txt
+  text_2.txt
+  text_3.txt
+```
+
+Try to use short, simple filenames with no spaces.
+
+Good filenames:
+
+```text
+austen_pride.txt
+poe_reddeath.txt
+my_interview_01.txt
+```
+
+Avoid filenames like:
+
+```text
+my text final version!!!.txt
+```
+
+## Setup
+
+```{r}
+# List the packages we need for this exercise.
+required_packages <- c("tidyverse", "readtext", "tidytext")
+
+# Check which packages are not installed yet.
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+
+# Install only the missing packages.
+if (length(missing_packages) > 0) {
+  install.packages(missing_packages)
+}
+
+# Load the packages so we can use their functions.
+library(tidyverse)
+library(readtext)
+library(tidytext)
+```
+
+## Check Your Folder
+
+```{r}
+# This is the folder where your text files should be.
+corpus_folder <- "my_corpus"
+
+# Check whether the folder exists.
+dir.exists(corpus_folder)
+```
+
+If the result is `FALSE`, create the folder `my_corpus` in the project folder and put your `.txt` files inside it.
+
+```{r}
+# Find all .txt files inside the folder.
+text_files <- list.files(
+  corpus_folder,
+  pattern = "\\.txt$",
+  full.names = TRUE
+)
+
+# Show the files R found.
+text_files
+```
+
+```{r}
+# Stop with a clear message if R did not find any .txt files.
+if (length(text_files) == 0) {
+  stop("No .txt files found. Put your plain text files inside the my_corpus folder.")
+}
+```
+
+## Import Your Text Files
+
+```{r}
+# Import all .txt files found in the folder.
+# Each file becomes one row in the data frame.
+corpus_docs <- readtext(text_files, encoding = "UTF-8") %>%
+  # Convert the result to a tibble, which prints nicely in R.
+  as_tibble()
+
+# Show the imported documents.
+corpus_docs
+```
+
+## Check the Import
+
+```{r}
+# Count how many documents were imported.
+nrow(corpus_docs)
+```
+
+```{r}
+# Show the document IDs.
+# These usually come from the filenames.
+corpus_docs %>%
+  select(doc_id)
+```
+
+```{r}
+# Count the number of characters in each document.
+# This is a quick way to spot empty or unexpectedly short files.
+corpus_docs %>%
+  mutate(n_characters = str_length(text)) %>%
+  select(doc_id, n_characters)
+```
+
+## Clean the Document Text
+
+```{r}
+# Clean the document-level text.
+corpus_docs <- corpus_docs %>%
+  # Replace repeated spaces, tabs, and line breaks with one space.
+  mutate(text = str_squish(text))
+
+# Check the cleaned documents.
+corpus_docs
+```
+
+## Split Into Sentences
+
+```{r}
+# Create a sentence-level corpus.
+corpus_sentences <- corpus_docs %>%
+  # Split each document into sentences.
+  unnest_sentences(
+    output = "sentence",
+    input = "text",
+    to_lower = FALSE
+  ) %>%
+  # Remove extra spaces inside each sentence.
+  mutate(sentence = str_squish(sentence)) %>%
+  # Group by document so sentence numbers restart for each file.
+  group_by(doc_id) %>%
+  # Add a sentence ID within each document.
+  mutate(sentence_id = row_number()) %>%
+  # Ungroup so later steps work on the full table.
+  ungroup()
+
+# Show the first sentences.
+head(corpus_sentences)
+```
+
+```{r}
+# Count how many sentences each document has.
+corpus_sentences %>%
+  count(doc_id, name = "n_sentences")
+```
+
+## Split Into Word Tokens
+
+```{r}
+# Create a token-level corpus.
+corpus_tokens <- corpus_sentences %>%
+  # Split each sentence into words.
+  unnest_tokens(
+    output = "word",
+    input = "sentence",
+    to_lower = TRUE,
+    drop = FALSE
+  ) %>%
+  # Group by document and sentence so token numbers restart in each sentence.
+  group_by(doc_id, sentence_id) %>%
+  # Add a token ID to keep word order.
+  mutate(token_id = row_number()) %>%
+  # Ungroup so later steps work on the full table.
+  ungroup()
+
+# Show the first tokens.
+head(corpus_tokens, 20)
+```
+
+```{r}
+# Count how many word tokens each document has.
+corpus_tokens %>%
+  count(doc_id, name = "n_words")
+```
+
+## Remove Stopwords
+
+Stopwords are very common words such as `the`, `and`, `of`, and `to`.
+
+Removing stopwords can make word frequency lists easier to read, but it also removes part of the language. Always think about whether stopword removal makes sense for your question.
+
+```{r}
+# Look at the stopword list from tidytext.
+head(stop_words)
+```
+
+```{r}
+# Remove stopwords from the token table.
+corpus_tokens_no_stopwords <- corpus_tokens %>%
+  # anti_join keeps rows from corpus_tokens where the word is NOT in stop_words.
+  anti_join(stop_words, by = "word")
+
+# Show the first tokens after stopword removal.
+head(corpus_tokens_no_stopwords, 20)
+```
+
+```{r}
+# Compare the number of tokens before and after stopword removal.
+tibble(
+  step = c("before stopword removal", "after stopword removal"),
+  n_tokens = c(nrow(corpus_tokens), nrow(corpus_tokens_no_stopwords))
+)
+```
+
+## Find Common Words
+
+```{r}
+# Count the most common words after stopword removal.
+common_words <- corpus_tokens_no_stopwords %>%
+  count(word, sort = TRUE)
+
+# Show the top 20 words.
+common_words %>%
+  slice_head(n = 20)
+```
+
+```{r}
+# Count the most common words in each document.
+common_words_by_document <- corpus_tokens_no_stopwords %>%
+  count(doc_id, word, sort = TRUE)
+
+# Show the first rows.
+common_words_by_document %>%
+  group_by(doc_id) %>%
+  slice_max(n, n = 10) %>%
+  ungroup()
+```
+
+## Save Your Corpus Objects
+
+This step is optional, but useful. It saves your imported corpus so you can use it again later.
+
+```{r}
+# Save the document-level corpus.
+save(corpus_docs, file = "my_corpus_docs.RData")
+
+# Save the sentence-level corpus.
+save(corpus_sentences, file = "my_corpus_sentences.RData")
+
+# Save the token-level corpus without stopwords.
+save(corpus_tokens_no_stopwords, file = "my_corpus_tokens_no_stopwords.RData")
+```
+
+## Reflection
+
+Before analysing the results, ask:
+
+- Which texts did I include?
+- Which texts did I leave out?
+- Are my files complete and clean?
+- Does sentence splitting look correct?
+- Does stopword removal help my question, or hide something important?
+- What should I check by reading the original sentences?
